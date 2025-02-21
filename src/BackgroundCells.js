@@ -74,7 +74,7 @@ class BackgroundCells extends React.Component {
   _selectable() {
     let node = this.containerRef.current
 
-    console.info('[SENTRY_EVENT] _selectable - node exists:', !!node)
+    console.log('[SENTRY_EVENT] _selectable - node exists:', !!node)
     Sentry.captureMessage(
       `[SENTRY_EVENT] _selectable - node exists: ${!!node}`,
       'info'
@@ -106,7 +106,7 @@ class BackgroundCells extends React.Component {
     }
 
     selector.on('selecting', (box) => {
-      console.info('[SENTRY_EVENT] selecting - box:', box)
+      console.log('[SENTRY_EVENT] selecting - box:', box)
       Sentry.captureMessage(`[SENTRY_EVENT] selecting - box: ${box}`, 'info')
 
       let { range, rtl } = this.props
@@ -149,7 +149,7 @@ class BackgroundCells extends React.Component {
     )
 
     selector.on('select', (bounds) => {
-      console.info('[SENTRY_EVENT] select - bounds:', bounds)
+      console.log('[SENTRY_EVENT] select - bounds:', bounds)
       Sentry.captureMessage(`[SENTRY_EVENT] select - bounds: ${bounds}`, 'info')
 
       this._selectSlot({ ...this.state, action: 'select', bounds })
@@ -166,7 +166,7 @@ class BackgroundCells extends React.Component {
   }
 
   _selectSlot({ endIdx, startIdx, action, bounds, box }) {
-    console.info(
+    console.log(
       '[SENTRY_EVENT] _selectSlot - startIdx:',
       startIdx,
       'endIdx:',
