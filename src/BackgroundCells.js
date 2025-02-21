@@ -79,6 +79,7 @@ class BackgroundCells extends React.Component {
       `[SENTRY_EVENT] _selectable - node exists: ${!!node}`,
       'info'
     )
+    Sentry.captureException(new Error("테스트 오류"));
 
     let selector = (this._selector = new Selection(this.props.container, {
       longPressThreshold: this.props.longPressThreshold,
