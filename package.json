@@ -111,6 +111,8 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.20.7",
+    "@sentry/browser": "^9.1.0",
+    "@sentry/react": "^9.1.0",
     "clsx": "^1.2.1",
     "date-arithmetic": "^4.1.0",
     "dayjs": "^1.11.7",
