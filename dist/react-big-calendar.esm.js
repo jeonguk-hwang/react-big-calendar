@@ -1224,17 +1224,7 @@ Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar',
-  debug: true,
-  // 디버깅 활성화
-  beforeSend: function beforeSend(event) {
-    // 특정 이벤트를 무시하는 로직이 있는지 확인
-    if (event.message && event.message.includes("SomeIgnoredError")) {
-      return null; // 이러면 이벤트가 폐기됨
-    }
-
-    return event;
-  },
-  sampleRate: 1.0 // 100% 전송
+  debug: true // 디버깅 활성화
 });
 
 var BackgroundCells = /*#__PURE__*/function (_React$Component) {
@@ -1305,8 +1295,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       var _this2 = this;
       var node = this.containerRef.current;
       console.log('[SENTRY_EVENT] _selectable - node exists:', !!node);
-      Sentry.captureMessage("[SENTRY_EVENT] _selectable - node exists: ".concat(!!node), 'info');
-      Sentry.captureException(new Error("테스트 오류"));
+      Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node exists: ".concat(!!node)));
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
       });
@@ -1333,7 +1322,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       };
       selector.on('selecting', function (box) {
         console.log('[SENTRY_EVENT] selecting - box:', box);
-        Sentry.captureMessage("[SENTRY_EVENT] selecting - box: ".concat(box), 'info');
+        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - box: ".concat(box)));
         var _this2$props2 = _this2.props,
           range = _this2$props2.range,
           rtl = _this2$props2.rtl;
@@ -1370,7 +1359,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       });
       selector.on('select', function (bounds) {
         console.log('[SENTRY_EVENT] select - bounds:', bounds);
-        Sentry.captureMessage("[SENTRY_EVENT] select - bounds: ".concat(bounds), 'info');
+        Sentry.captureException(new Error("[SENTRY_EVENT] select - bounds: ".concat(bounds)));
         _this2._selectSlot(_objectSpread(_objectSpread({}, _this2.state), {}, {
           action: 'select',
           bounds: bounds
@@ -1398,7 +1387,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         bounds = _ref.bounds,
         box = _ref.box;
       console.log('[SENTRY_EVENT] _selectSlot - startIdx:', startIdx, 'endIdx:', endIdx, 'action:', action);
-      Sentry.captureMessage("[SENTRY_EVENT] _selectSlot - startIdx: ".concat(startIdx, " endIdx: ").concat(endIdx, " action: ").concat(action), 'info');
+      Sentry.captureException(new Error("[SENTRY_EVENT] _selectSlot - startIdx: ".concat(startIdx, " endIdx: ").concat(endIdx, " action: ").concat(action)));
       if (endIdx !== -1 && startIdx !== -1) this.props.onSelectSlot && this.props.onSelectSlot({
         start: startIdx,
         end: endIdx,
@@ -3434,6 +3423,11 @@ var ResourceHeader = function ResourceHeader(_ref) {
   var label = _ref.label;
   return /*#__PURE__*/React.createElement(React.Fragment, null, label);
 };
+ResourceHeader.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node,
+  index: PropTypes.number,
+  resource: PropTypes.object
+} : {};
 
 var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
   _inherits(TimeGridHeader, _React$Component);
