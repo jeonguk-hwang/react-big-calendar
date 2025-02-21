@@ -111,6 +111,8 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.20.7",
+    "@sentry/browser": "^9.1.0",
+    "@sentry/react": "^9.1.0",
     "clsx": "^1.2.1",
     "date-arithmetic": "^4.1.0",
     "dayjs": "^1.11.7",
@@ -130,5 +132,6 @@
   "bugs": {
     "url": "https://github.com/jquense/react-big-calendar/issues"
   },
-  "homepage": "https://github.com/jquense/react-big-calendar#readme"
+  "homepage": "https://github.com/jquense/react-big-calendar#readme",
+  "packageManager": "yarn@3.8.6+sha512.a1c3a781c248a6d957eacd53f9b965663af89ef777982d7d9086af6de00cab8724cb75bade6b0cdfcaa04f63e20767fc435aade5489be976a5745d6ee03c7932"
 }
