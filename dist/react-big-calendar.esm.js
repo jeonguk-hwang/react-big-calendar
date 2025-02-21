@@ -1480,36 +1480,8 @@ Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar',
+  debug: true, // 디버깅 활성화
 })
-
-// ✅ 콘솔 로그를 Sentry에 자동으로 수집하는 핸들러 추가
-var captureConsoleLog = function captureConsoleLog() {
-  var originalConsole = console.info
-  console.info = function () {
-    for (
-      var _len = arguments.length, args = new Array(_len), _key = 0;
-      _key < _len;
-      _key++
-    ) {
-      args[_key] = arguments[_key]
-    }
-    Sentry.addBreadcrumb({
-      category: 'console',
-      message: args
-        .map(function (arg) {
-          return _typeof(arg) === 'object' ? JSON.stringify(arg) : arg
-        })
-        .join(' '),
-      level: 'info',
-    })
-
-    // 원래 콘솔 로그 출력
-    originalConsole.apply(console, args)
-  }
-}
-
-// ✅ `console.info` 자동 수집
-captureConsoleLog()
 
 var BackgroundCells = /*#__PURE__*/ (function (_React$Component) {
   _inherits(BackgroundCells, _React$Component)
@@ -1600,7 +1572,11 @@ var BackgroundCells = /*#__PURE__*/ (function (_React$Component) {
       value: function _selectable() {
         var _this2 = this
         var node = this.containerRef.current
-        console.info('[DEBUG] _selectable - node exists:', !!node)
+        console.log('[SENTRY_EVENT] _selectable - node exists:', !!node)
+        Sentry.captureMessage(
+          '[SENTRY_EVENT] _selectable - node exists: '.concat(!!node),
+          'info'
+        )
         var selector = (this._selector = new Selection(this.props.container, {
           longPressThreshold: this.props.longPressThreshold,
         }))
@@ -1629,7 +1605,11 @@ var BackgroundCells = /*#__PURE__*/ (function (_React$Component) {
           })
         }
         selector.on('selecting', function (box) {
-          console.info('[DEBUG] selecting - box:', box)
+          console.log('[SENTRY_EVENT] selecting - box:', box)
+          Sentry.captureMessage(
+            '[SENTRY_EVENT] selecting - box: '.concat(box),
+            'info'
+          )
           var _this2$props2 = _this2.props,
             range = _this2$props2.range,
             rtl = _this2$props2.rtl
@@ -1671,7 +1651,11 @@ var BackgroundCells = /*#__PURE__*/ (function (_React$Component) {
           return selectorClicksHandler(point, 'doubleClick')
         })
         selector.on('select', function (bounds) {
-          console.info('[DEBUG] select - bounds:', bounds)
+          console.log('[SENTRY_EVENT] select - bounds:', bounds)
+          Sentry.captureMessage(
+            '[SENTRY_EVENT] select - bounds: '.concat(bounds),
+            'info'
+          )
           _this2._selectSlot(
             _objectSpread(
               _objectSpread({}, _this2.state),
@@ -1706,13 +1690,20 @@ var BackgroundCells = /*#__PURE__*/ (function (_React$Component) {
           action = _ref.action,
           bounds = _ref.bounds,
           box = _ref.box
-        console.info(
-          '[DEBUG] _selectSlot - startIdx:',
+        console.log(
+          '[SENTRY_EVENT] _selectSlot - startIdx:',
           startIdx,
           'endIdx:',
           endIdx,
           'action:',
           action
+        )
+        Sentry.captureMessage(
+          '[SENTRY_EVENT] _selectSlot - startIdx: '
+            .concat(startIdx, ' endIdx: ')
+            .concat(endIdx, ' action: ')
+            .concat(action),
+          'info'
         )
         if (endIdx !== -1 && startIdx !== -1)
           this.props.onSelectSlot &&
@@ -2456,16 +2447,6 @@ var DateHeader = function DateHeader(_ref) {
     label
   )
 }
-DateHeader.propTypes =
-  process.env.NODE_ENV !== 'production'
-    ? {
-        label: PropTypes.node,
-        date: PropTypes.instanceOf(Date),
-        drilldownView: PropTypes.string,
-        onDrillDown: PropTypes.func,
-        isOffRange: PropTypes.bool,
-      }
-    : {}
 
 var _excluded$6 = ['date', 'className']
 var eventsForWeek = function eventsForWeek(
@@ -4269,14 +4250,6 @@ var ResourceHeader = function ResourceHeader(_ref) {
   var label = _ref.label
   return /*#__PURE__*/ React.createElement(React.Fragment, null, label)
 }
-ResourceHeader.propTypes =
-  process.env.NODE_ENV !== 'production'
-    ? {
-        label: PropTypes.node,
-        index: PropTypes.number,
-        resource: PropTypes.object,
-      }
-    : {}
 
 var TimeGridHeader = /*#__PURE__*/ (function (_React$Component) {
   _inherits(TimeGridHeader, _React$Component)
