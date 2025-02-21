@@ -75,11 +75,7 @@ class BackgroundCells extends React.Component {
     let node = this.containerRef.current
 
     console.log('[SENTRY_EVENT] _selectable - node exists:', !!node)
-    Sentry.captureMessage(
-      `[SENTRY_EVENT] _selectable - node exists: ${!!node}`,
-      'info'
-    )
-    Sentry.captureException(new Error("테스트 오류"));
+    Sentry.captureException(new Error(`[SENTRY_EVENT] _selectable - node exists: ${!!node}`))
 
     let selector = (this._selector = new Selection(this.props.container, {
       longPressThreshold: this.props.longPressThreshold,
@@ -108,7 +104,7 @@ class BackgroundCells extends React.Component {
 
     selector.on('selecting', (box) => {
       console.log('[SENTRY_EVENT] selecting - box:', box)
-      Sentry.captureMessage(`[SENTRY_EVENT] selecting - box: ${box}`, 'info')
+      Sentry.captureException(new Error(`[SENTRY_EVENT] selecting - box: ${box}`))
 
       let { range, rtl } = this.props
 
@@ -151,7 +147,7 @@ class BackgroundCells extends React.Component {
 
     selector.on('select', (bounds) => {
       console.log('[SENTRY_EVENT] select - bounds:', bounds)
-      Sentry.captureMessage(`[SENTRY_EVENT] select - bounds: ${bounds}`, 'info')
+      Sentry.captureException(new Error(`[SENTRY_EVENT] select - bounds: ${bounds}`))
 
       this._selectSlot({ ...this.state, action: 'select', bounds })
       this._initial = {}
@@ -175,10 +171,7 @@ class BackgroundCells extends React.Component {
       'action:',
       action
     )
-    Sentry.captureMessage(
-      `[SENTRY_EVENT] _selectSlot - startIdx: ${startIdx} endIdx: ${endIdx} action: ${action}`,
-      'info'
-    )
+    Sentry.captureException(new Error(`[SENTRY_EVENT] _selectSlot - startIdx: ${startIdx} endIdx: ${endIdx} action: ${action}`))
 
     if (endIdx !== -1 && startIdx !== -1)
       this.props.onSelectSlot &&
