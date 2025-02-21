@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import { notify } from './utils/helpers'
 import { dateCellSelection, getSlotAtX, pointInBox } from './utils/selection'
 import Selection, { getBoundsForNode, isEvent, isShowMore } from './Selection'
-import _ from './utils/sentry'
+import Sentry from './utils/sentry'
 
 class BackgroundCells extends React.Component {
   constructor(props, context) {
@@ -74,7 +74,11 @@ class BackgroundCells extends React.Component {
   _selectable() {
     let node = this.containerRef.current
 
-    console.info('[DEBUG] _selectable - node exists:', !!node)
+    console.info('[SENTRY_EVENT] _selectable - node exists:', !!node)
+    Sentry.captureMessage(
+      `[SENTRY_EVENT] _selectable - node exists: ${!!node}`,
+      'info'
+    )
 
     let selector = (this._selector = new Selection(this.props.container, {
       longPressThreshold: this.props.longPressThreshold,
@@ -102,7 +106,8 @@ class BackgroundCells extends React.Component {
     }
 
     selector.on('selecting', (box) => {
-      console.info('[DEBUG] selecting - box:', box)
+      console.info('[SENTRY_EVENT] selecting - box:', box)
+      Sentry.captureMessage(`[SENTRY_EVENT] selecting - box: ${box}`, 'info')
 
       let { range, rtl } = this.props
 
@@ -144,7 +149,8 @@ class BackgroundCells extends React.Component {
     )
 
     selector.on('select', (bounds) => {
-      console.info('[DEBUG] select - bounds:', bounds)
+      console.info('[SENTRY_EVENT] select - bounds:', bounds)
+      Sentry.captureMessage(`[SENTRY_EVENT] select - bounds: ${bounds}`, 'info')
 
       this._selectSlot({ ...this.state, action: 'select', bounds })
       this._initial = {}
@@ -161,12 +167,16 @@ class BackgroundCells extends React.Component {
 
   _selectSlot({ endIdx, startIdx, action, bounds, box }) {
     console.info(
-      '[DEBUG] _selectSlot - startIdx:',
+      '[SENTRY_EVENT] _selectSlot - startIdx:',
       startIdx,
       'endIdx:',
       endIdx,
       'action:',
       action
+    )
+    Sentry.captureMessage(
+      `[SENTRY_EVENT] _selectSlot - startIdx: ${startIdx} endIdx: ${endIdx} action: ${action}`,
+      'info'
     )
 
     if (endIdx !== -1 && startIdx !== -1)

@@ -6,25 +6,4 @@ Sentry.init({
   release: 'react-big-calendar',
 })
 
-// ✅ 콘솔 로그를 Sentry에 자동으로 수집하는 핸들러 추가
-const captureConsoleLog = () => {
-  const originalConsole = console.info
-
-  console.info = (...args) => {
-    Sentry.addBreadcrumb({
-      category: 'console',
-      message: args
-        .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : arg))
-        .join(' '),
-      level: 'info',
-    })
-
-    // 원래 콘솔 로그 출력
-    originalConsole.apply(console, args)
-  }
-}
-
-// ✅ `console.info` 자동 수집
-captureConsoleLog()
-
 export default Sentry
