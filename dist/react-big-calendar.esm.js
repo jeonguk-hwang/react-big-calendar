@@ -1224,9 +1224,7 @@ Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar',
-  beforeSend: function beforeSend(event) {
-    return event;
-  }
+  sampleRate: 1.0 // 100% 전송
 });
 
 var BackgroundCells = /*#__PURE__*/function (_React$Component) {
@@ -1504,9 +1502,6 @@ var EventRow = /*#__PURE__*/function (_React$Component) {
   }]);
   return EventRow;
 }(React.Component);
-EventRow.propTypes = process.env.NODE_ENV !== "production" ? _objectSpread({
-  segments: PropTypes.array
-}, EventRowMixin.propTypes) : {};
 EventRow.defaultProps = _objectSpread({}, EventRowMixin.defaultProps);
 
 function endOfRange(_ref) {
@@ -1963,9 +1958,6 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
-Header.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node
-} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -3417,11 +3409,6 @@ var ResourceHeader = function ResourceHeader(_ref) {
   var label = _ref.label;
   return /*#__PURE__*/React.createElement(React.Fragment, null, label);
 };
-ResourceHeader.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node,
-  index: PropTypes.number,
-  resource: PropTypes.object
-} : {};
 
 var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
   _inherits(TimeGridHeader, _React$Component);
