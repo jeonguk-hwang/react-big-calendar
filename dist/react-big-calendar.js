@@ -38056,6 +38056,3752 @@
     return null;
   }
 
+  function addEventListener$1(type, handler) {
+    var target = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : document;
+    return listen(target, type, handler, {
+      passive: false
+    });
+  }
+  function isOverContainer(container, x, y) {
+    return !container || contains$1(container, document.elementFromPoint(x, y));
+  }
+  function getEventNodeFromPoint(node, _ref) {
+    var clientX = _ref.clientX,
+      clientY = _ref.clientY;
+    var target = document.elementFromPoint(clientX, clientY);
+    return closest(target, '.rbc-event', node);
+  }
+  function getShowMoreNodeFromPoint(node, _ref2) {
+    var clientX = _ref2.clientX,
+      clientY = _ref2.clientY;
+    var target = document.elementFromPoint(clientX, clientY);
+    return closest(target, '.rbc-show-more', node);
+  }
+  function isEvent$1(node, bounds) {
+    return !!getEventNodeFromPoint(node, bounds);
+  }
+  function isShowMore(node, bounds) {
+    return !!getShowMoreNodeFromPoint(node, bounds);
+  }
+  function getEventCoordinates(e) {
+    var target = e;
+    if (e.touches && e.touches.length) {
+      target = e.touches[0];
+    }
+    return {
+      clientX: target.clientX,
+      clientY: target.clientY,
+      pageX: target.pageX,
+      pageY: target.pageY
+    };
+  }
+  var clickTolerance = 5;
+  var clickInterval = 250;
+  var Selection = /*#__PURE__*/function () {
+    function Selection(node) {
+      var _ref3 = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
+        _ref3$global = _ref3.global,
+        global = _ref3$global === void 0 ? false : _ref3$global,
+        _ref3$longPressThresh = _ref3.longPressThreshold,
+        longPressThreshold = _ref3$longPressThresh === void 0 ? 250 : _ref3$longPressThresh,
+        _ref3$validContainers = _ref3.validContainers,
+        validContainers = _ref3$validContainers === void 0 ? [] : _ref3$validContainers;
+      _classCallCheck(this, Selection);
+      this.isDetached = false;
+      this.container = node;
+      this.globalMouse = !node || global;
+      this.longPressThreshold = longPressThreshold;
+      this.validContainers = validContainers;
+      this._listeners = Object.create(null);
+      this._handleInitialEvent = this._handleInitialEvent.bind(this);
+      this._handleMoveEvent = this._handleMoveEvent.bind(this);
+      this._handleTerminatingEvent = this._handleTerminatingEvent.bind(this);
+      this._keyListener = this._keyListener.bind(this);
+      this._dropFromOutsideListener = this._dropFromOutsideListener.bind(this);
+      this._dragOverFromOutsideListener = this._dragOverFromOutsideListener.bind(this);
+
+      // Fixes an iOS 10 bug where scrolling could not be prevented on the window.
+      // https://github.com/metafizzy/flickity/issues/457#issuecomment-254501356
+      this._removeTouchMoveWindowListener = addEventListener$1('touchmove', function () {}, window);
+      this._removeKeyDownListener = addEventListener$1('keydown', this._keyListener);
+      this._removeKeyUpListener = addEventListener$1('keyup', this._keyListener);
+      this._removeDropFromOutsideListener = addEventListener$1('drop', this._dropFromOutsideListener);
+      this._removeDragOverFromOutsideListener = addEventListener$1('dragover', this._dragOverFromOutsideListener);
+      this._addInitialEventListener();
+    }
+    _createClass(Selection, [{
+      key: "on",
+      value: function on(type, handler) {
+        var handlers = this._listeners[type] || (this._listeners[type] = []);
+        handlers.push(handler);
+        return {
+          remove: function remove() {
+            var idx = handlers.indexOf(handler);
+            if (idx !== -1) handlers.splice(idx, 1);
+          }
+        };
+      }
+    }, {
+      key: "emit",
+      value: function emit(type) {
+        for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+          args[_key - 1] = arguments[_key];
+        }
+        var result;
+        var handlers = this._listeners[type] || [];
+        handlers.forEach(function (fn) {
+          if (result === undefined) result = fn.apply(void 0, args);
+        });
+        return result;
+      }
+    }, {
+      key: "teardown",
+      value: function teardown() {
+        this.isDetached = true;
+        this._listeners = Object.create(null);
+        this._removeTouchMoveWindowListener && this._removeTouchMoveWindowListener();
+        this._removeInitialEventListener && this._removeInitialEventListener();
+        this._removeEndListener && this._removeEndListener();
+        this._onEscListener && this._onEscListener();
+        this._removeMoveListener && this._removeMoveListener();
+        this._removeKeyUpListener && this._removeKeyUpListener();
+        this._removeKeyDownListener && this._removeKeyDownListener();
+        this._removeDropFromOutsideListener && this._removeDropFromOutsideListener();
+        this._removeDragOverFromOutsideListener && this._removeDragOverFromOutsideListener();
+      }
+    }, {
+      key: "isSelected",
+      value: function isSelected(node) {
+        var box = this._selectRect;
+        if (!box || !this.selecting) return false;
+        return objectsCollide(box, getBoundsForNode(node));
+      }
+    }, {
+      key: "filter",
+      value: function filter(items) {
+        var box = this._selectRect;
+
+        //not selecting
+        if (!box || !this.selecting) return [];
+        return items.filter(this.isSelected, this);
+      }
+
+      // Adds a listener that will call the handler only after the user has pressed on the screen
+      // without moving their finger for 250ms.
+    }, {
+      key: "_addLongPressListener",
+      value: function _addLongPressListener(handler, initialEvent) {
+        var _this = this;
+        var timer = null;
+        var removeTouchMoveListener = null;
+        var removeTouchEndListener = null;
+        var handleTouchStart = function handleTouchStart(initialEvent) {
+          timer = setTimeout(function () {
+            cleanup();
+            handler(initialEvent);
+          }, _this.longPressThreshold);
+          removeTouchMoveListener = addEventListener$1('touchmove', function () {
+            return cleanup();
+          });
+          removeTouchEndListener = addEventListener$1('touchend', function () {
+            return cleanup();
+          });
+        };
+        var removeTouchStartListener = addEventListener$1('touchstart', handleTouchStart);
+        var cleanup = function cleanup() {
+          if (timer) {
+            clearTimeout(timer);
+          }
+          if (removeTouchMoveListener) {
+            removeTouchMoveListener();
+          }
+          if (removeTouchEndListener) {
+            removeTouchEndListener();
+          }
+          timer = null;
+          removeTouchMoveListener = null;
+          removeTouchEndListener = null;
+        };
+        if (initialEvent) {
+          handleTouchStart(initialEvent);
+        }
+        return function () {
+          cleanup();
+          removeTouchStartListener();
+        };
+      }
+
+      // Listen for mousedown and touchstart events. When one is received, disable the other and setup
+      // future event handling based on the type of event.
+    }, {
+      key: "_addInitialEventListener",
+      value: function _addInitialEventListener() {
+        var _this2 = this;
+        var removeMouseDownListener = addEventListener$1('mousedown', function (e) {
+          _this2._removeInitialEventListener();
+          _this2._handleInitialEvent(e);
+          _this2._removeInitialEventListener = addEventListener$1('mousedown', _this2._handleInitialEvent);
+        });
+        var removeTouchStartListener = addEventListener$1('touchstart', function (e) {
+          _this2._removeInitialEventListener();
+          _this2._removeInitialEventListener = _this2._addLongPressListener(_this2._handleInitialEvent, e);
+        });
+        this._removeInitialEventListener = function () {
+          removeMouseDownListener();
+          removeTouchStartListener();
+        };
+      }
+    }, {
+      key: "_dropFromOutsideListener",
+      value: function _dropFromOutsideListener(e) {
+        var _getEventCoordinates = getEventCoordinates(e),
+          pageX = _getEventCoordinates.pageX,
+          pageY = _getEventCoordinates.pageY,
+          clientX = _getEventCoordinates.clientX,
+          clientY = _getEventCoordinates.clientY;
+        this.emit('dropFromOutside', {
+          x: pageX,
+          y: pageY,
+          clientX: clientX,
+          clientY: clientY
+        });
+        e.preventDefault();
+      }
+    }, {
+      key: "_dragOverFromOutsideListener",
+      value: function _dragOverFromOutsideListener(e) {
+        var _getEventCoordinates2 = getEventCoordinates(e),
+          pageX = _getEventCoordinates2.pageX,
+          pageY = _getEventCoordinates2.pageY,
+          clientX = _getEventCoordinates2.clientX,
+          clientY = _getEventCoordinates2.clientY;
+        this.emit('dragOverFromOutside', {
+          x: pageX,
+          y: pageY,
+          clientX: clientX,
+          clientY: clientY
+        });
+        e.preventDefault();
+      }
+    }, {
+      key: "_handleInitialEvent",
+      value: function _handleInitialEvent(e) {
+        if (this.isDetached) {
+          return;
+        }
+        var _getEventCoordinates3 = getEventCoordinates(e),
+          clientX = _getEventCoordinates3.clientX,
+          clientY = _getEventCoordinates3.clientY,
+          pageX = _getEventCoordinates3.pageX,
+          pageY = _getEventCoordinates3.pageY;
+        var node = this.container(),
+          collides,
+          offsetData;
+
+        // Right clicks
+        if (e.which === 3 || e.button === 2 || !isOverContainer(node, clientX, clientY)) return;
+        if (!this.globalMouse && node && !contains$1(node, e.target)) {
+          var _normalizeDistance = normalizeDistance(0),
+            top = _normalizeDistance.top,
+            left = _normalizeDistance.left,
+            bottom = _normalizeDistance.bottom,
+            right = _normalizeDistance.right;
+          offsetData = getBoundsForNode(node);
+          collides = objectsCollide({
+            top: offsetData.top - top,
+            left: offsetData.left - left,
+            bottom: offsetData.bottom + bottom,
+            right: offsetData.right + right
+          }, {
+            top: pageY,
+            left: pageX
+          });
+          if (!collides) return;
+        }
+        var result = this.emit('beforeSelect', this._initialEventData = {
+          isTouch: /^touch/.test(e.type),
+          x: pageX,
+          y: pageY,
+          clientX: clientX,
+          clientY: clientY
+        });
+        if (result === false) return;
+        switch (e.type) {
+          case 'mousedown':
+            this._removeEndListener = addEventListener$1('mouseup', this._handleTerminatingEvent);
+            this._onEscListener = addEventListener$1('keydown', this._handleTerminatingEvent);
+            this._removeMoveListener = addEventListener$1('mousemove', this._handleMoveEvent);
+            break;
+          case 'touchstart':
+            this._handleMoveEvent(e);
+            this._removeEndListener = addEventListener$1('touchend', this._handleTerminatingEvent);
+            this._removeMoveListener = addEventListener$1('touchmove', this._handleMoveEvent);
+            break;
+        }
+      }
+
+      // Check whether provided event target element
+      // - is contained within a valid container
+    }, {
+      key: "_isWithinValidContainer",
+      value: function _isWithinValidContainer(e) {
+        var eventTarget = e.target;
+        var containers = this.validContainers;
+        if (!containers || !containers.length || !eventTarget) {
+          return true;
+        }
+        return containers.some(function (target) {
+          return !!eventTarget.closest(target);
+        });
+      }
+    }, {
+      key: "_handleTerminatingEvent",
+      value: function _handleTerminatingEvent(e) {
+        var _getEventCoordinates4 = getEventCoordinates(e),
+          pageX = _getEventCoordinates4.pageX,
+          pageY = _getEventCoordinates4.pageY;
+        this.selecting = false;
+        this._removeEndListener && this._removeEndListener();
+        this._removeMoveListener && this._removeMoveListener();
+        if (!this._initialEventData) return;
+        var inRoot = !this.container || contains$1(this.container(), e.target);
+        var isWithinValidContainer = this._isWithinValidContainer(e);
+        var bounds = this._selectRect;
+        var click = this.isClick(pageX, pageY);
+        this._initialEventData = null;
+        if (e.key === 'Escape' || !isWithinValidContainer) {
+          return this.emit('reset');
+        }
+        if (click && inRoot) {
+          return this._handleClickEvent(e);
+        }
+
+        // User drag-clicked in the Selectable area
+        if (!click) return this.emit('select', bounds);
+        return this.emit('reset');
+      }
+    }, {
+      key: "_handleClickEvent",
+      value: function _handleClickEvent(e) {
+        var _getEventCoordinates5 = getEventCoordinates(e),
+          pageX = _getEventCoordinates5.pageX,
+          pageY = _getEventCoordinates5.pageY,
+          clientX = _getEventCoordinates5.clientX,
+          clientY = _getEventCoordinates5.clientY;
+        var now = new Date().getTime();
+        if (this._lastClickData && now - this._lastClickData.timestamp < clickInterval) {
+          // Double click event
+          this._lastClickData = null;
+          return this.emit('doubleClick', {
+            x: pageX,
+            y: pageY,
+            clientX: clientX,
+            clientY: clientY
+          });
+        }
+
+        // Click event
+        this._lastClickData = {
+          timestamp: now
+        };
+        return this.emit('click', {
+          x: pageX,
+          y: pageY,
+          clientX: clientX,
+          clientY: clientY
+        });
+      }
+    }, {
+      key: "_handleMoveEvent",
+      value: function _handleMoveEvent(e) {
+        if (this._initialEventData === null || this.isDetached) {
+          return;
+        }
+        var _this$_initialEventDa = this._initialEventData,
+          x = _this$_initialEventDa.x,
+          y = _this$_initialEventDa.y;
+        var _getEventCoordinates6 = getEventCoordinates(e),
+          pageX = _getEventCoordinates6.pageX,
+          pageY = _getEventCoordinates6.pageY;
+        var w = Math.abs(x - pageX);
+        var h = Math.abs(y - pageY);
+        var left = Math.min(pageX, x),
+          top = Math.min(pageY, y),
+          old = this.selecting;
+
+        // Prevent emitting selectStart event until mouse is moved.
+        // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
+        if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+          return;
+        }
+        this.selecting = true;
+        this._selectRect = {
+          top: top,
+          left: left,
+          x: pageX,
+          y: pageY,
+          right: left + w,
+          bottom: top + h
+        };
+        if (!old) {
+          this.emit('selectStart', this._initialEventData);
+        }
+        if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
+        e.preventDefault();
+      }
+    }, {
+      key: "_keyListener",
+      value: function _keyListener(e) {
+        this.ctrl = e.metaKey || e.ctrlKey;
+      }
+    }, {
+      key: "isClick",
+      value: function isClick(pageX, pageY) {
+        var _this$_initialEventDa2 = this._initialEventData,
+          x = _this$_initialEventDa2.x,
+          y = _this$_initialEventDa2.y,
+          isTouch = _this$_initialEventDa2.isTouch;
+        return !isTouch && Math.abs(pageX - x) <= clickTolerance && Math.abs(pageY - y) <= clickTolerance;
+      }
+    }]);
+    return Selection;
+  }();
+  /**
+   * Resolve the disance prop from either an Int or an Object
+   * @return {Object}
+   */
+  function normalizeDistance() {
+    var distance = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
+    if (_typeof(distance) !== 'object') distance = {
+      top: distance,
+      left: distance,
+      right: distance,
+      bottom: distance
+    };
+    return distance;
+  }
+
+  /**
+   * Given two objects containing "top", "left", "offsetWidth" and "offsetHeight"
+   * properties, determine if they collide.
+   * @param  {Object|HTMLElement} a
+   * @param  {Object|HTMLElement} b
+   * @return {bool}
+   */
+  function objectsCollide(nodeA, nodeB) {
+    var tolerance = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 0;
+    var _getBoundsForNode = getBoundsForNode(nodeA),
+      aTop = _getBoundsForNode.top,
+      aLeft = _getBoundsForNode.left,
+      _getBoundsForNode$rig = _getBoundsForNode.right,
+      aRight = _getBoundsForNode$rig === void 0 ? aLeft : _getBoundsForNode$rig,
+      _getBoundsForNode$bot = _getBoundsForNode.bottom,
+      aBottom = _getBoundsForNode$bot === void 0 ? aTop : _getBoundsForNode$bot;
+    var _getBoundsForNode2 = getBoundsForNode(nodeB),
+      bTop = _getBoundsForNode2.top,
+      bLeft = _getBoundsForNode2.left,
+      _getBoundsForNode2$ri = _getBoundsForNode2.right,
+      bRight = _getBoundsForNode2$ri === void 0 ? bLeft : _getBoundsForNode2$ri,
+      _getBoundsForNode2$bo = _getBoundsForNode2.bottom,
+      bBottom = _getBoundsForNode2$bo === void 0 ? bTop : _getBoundsForNode2$bo;
+    return !(
+    // 'a' bottom doesn't touch 'b' top
+
+    aBottom - tolerance < bTop ||
+    // 'a' top doesn't touch 'b' bottom
+    aTop + tolerance > bBottom ||
+    // 'a' right doesn't touch 'b' left
+    aRight - tolerance < bLeft ||
+    // 'a' left doesn't touch 'b' right
+    aLeft + tolerance > bRight);
+  }
+
+  /**
+   * Given a node, get everything needed to calculate its boundaries
+   * @param  {HTMLElement} node
+   * @return {Object}
+   */
+  function getBoundsForNode(node) {
+    if (!node.getBoundingClientRect) return node;
+    var rect = node.getBoundingClientRect(),
+      left = rect.left + pageOffset('left'),
+      top = rect.top + pageOffset('top');
+    return {
+      top: top,
+      left: left,
+      right: (node.offsetWidth || 0) + left,
+      bottom: (node.offsetHeight || 0) + top
+    };
+  }
+  function pageOffset(dir) {
+    if (dir === 'left') return window.pageXOffset || document.body.scrollLeft || 0;
+    if (dir === 'top') return window.pageYOffset || document.body.scrollTop || 0;
+  }
+
+  var BackgroundCells = /*#__PURE__*/function (_React$Component) {
+    _inherits(BackgroundCells, _React$Component);
+    var _super = _createSuper(BackgroundCells);
+    function BackgroundCells(props, context) {
+      var _this;
+      _classCallCheck(this, BackgroundCells);
+      _this = _super.call(this, props, context);
+      _this.state = {
+        selecting: false
+      };
+      _this.containerRef = /*#__PURE__*/reactExports.createRef();
+      return _this;
+    }
+    _createClass(BackgroundCells, [{
+      key: "componentDidMount",
+      value: function componentDidMount() {
+        this.props.selectable && this._selectable();
+      }
+    }, {
+      key: "componentWillUnmount",
+      value: function componentWillUnmount() {
+        this._teardownSelectable();
+      }
+    }, {
+      key: "componentDidUpdate",
+      value: function componentDidUpdate(prevProps) {
+        if (!prevProps.selectable && this.props.selectable) this._selectable();
+        if (prevProps.selectable && !this.props.selectable) this._teardownSelectable();
+      }
+    }, {
+      key: "render",
+      value: function render() {
+        var _this$props = this.props,
+          range = _this$props.range,
+          getNow = _this$props.getNow,
+          getters = _this$props.getters,
+          currentDate = _this$props.date,
+          Wrapper = _this$props.components.dateCellWrapper,
+          localizer = _this$props.localizer;
+        var _this$state = this.state,
+          selecting = _this$state.selecting,
+          startIdx = _this$state.startIdx,
+          endIdx = _this$state.endIdx;
+        var current = getNow();
+        return /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row-bg",
+          ref: this.containerRef
+        }, range.map(function (date, index) {
+          var selected = selecting && index >= startIdx && index <= endIdx;
+          var _getters$dayProp = getters.dayProp(date),
+            className = _getters$dayProp.className,
+            style = _getters$dayProp.style;
+          return /*#__PURE__*/React.createElement(Wrapper, {
+            key: index,
+            value: date,
+            range: range
+          }, /*#__PURE__*/React.createElement("div", {
+            style: style,
+            className: clsx('rbc-day-bg', className, selected && 'rbc-selected-cell', localizer.isSameDate(date, current) && 'rbc-today', currentDate && localizer.neq(currentDate, date, 'month') && 'rbc-off-range-bg')
+          }));
+        }));
+      }
+    }, {
+      key: "_selectable",
+      value: function _selectable() {
+        var _this2 = this;
+        var node = this.containerRef.current;
+        var selector = this._selector = new Selection(this.props.container, {
+          longPressThreshold: this.props.longPressThreshold
+        });
+        var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
+          if (!isEvent$1(node, point) && !isShowMore(node, point)) {
+            var rowBox = getBoundsForNode(node);
+            var _this2$props = _this2.props,
+              range = _this2$props.range,
+              rtl = _this2$props.rtl;
+            if (pointInBox(rowBox, point)) {
+              var currentCell = getSlotAtX(rowBox, point.x, rtl, range.length);
+              _this2._selectSlot({
+                startIdx: currentCell,
+                endIdx: currentCell,
+                action: actionType,
+                box: point
+              });
+            }
+          }
+          _this2._initial = {};
+          _this2.setState({
+            selecting: false
+          });
+        };
+        selector.on('selecting', function (box) {
+          var _this2$props2 = _this2.props,
+            range = _this2$props2.range,
+            rtl = _this2$props2.rtl;
+          var startIdx = -1;
+          var endIdx = -1;
+          if (!_this2.state.selecting) {
+            notify(_this2.props.onSelectStart, [box]);
+            _this2._initial = {
+              x: box.x,
+              y: box.y
+            };
+          }
+          if (selector.isSelected(node)) {
+            var nodeBox = getBoundsForNode(node);
+            var _dateCellSelection = dateCellSelection(_this2._initial, nodeBox, box, range.length, rtl);
+            startIdx = _dateCellSelection.startIdx;
+            endIdx = _dateCellSelection.endIdx;
+          }
+          _this2.setState({
+            selecting: true,
+            startIdx: startIdx,
+            endIdx: endIdx
+          });
+        });
+        selector.on('beforeSelect', function (box) {
+          if (_this2.props.selectable !== 'ignoreEvents') return;
+          return !isEvent$1(_this2.containerRef.current, box);
+        });
+        selector.on('click', function (point) {
+          return selectorClicksHandler(point, 'click');
+        });
+        selector.on('doubleClick', function (point) {
+          return selectorClicksHandler(point, 'doubleClick');
+        });
+        selector.on('select', function (bounds) {
+          _this2._selectSlot(_objectSpread2(_objectSpread2({}, _this2.state), {}, {
+            action: 'select',
+            bounds: bounds
+          }));
+          _this2._initial = {};
+          _this2.setState({
+            selecting: false
+          });
+          notify(_this2.props.onSelectEnd, [_this2.state]);
+        });
+      }
+    }, {
+      key: "_teardownSelectable",
+      value: function _teardownSelectable() {
+        if (!this._selector) return;
+        this._selector.teardown();
+        this._selector = null;
+      }
+    }, {
+      key: "_selectSlot",
+      value: function _selectSlot(_ref) {
+        var endIdx = _ref.endIdx,
+          startIdx = _ref.startIdx,
+          action = _ref.action,
+          bounds = _ref.bounds,
+          box = _ref.box;
+        if (endIdx !== -1 && startIdx !== -1) this.props.onSelectSlot && this.props.onSelectSlot({
+          start: startIdx,
+          end: endIdx,
+          action: action,
+          bounds: bounds,
+          box: box,
+          resourceId: this.props.resourceId
+        });
+      }
+    }]);
+    return BackgroundCells;
+  }(React.Component);
+
+  /* eslint-disable react/prop-types */
+  var EventRowMixin = {
+    propTypes: {
+      slotMetrics: propTypesExports.object.isRequired,
+      selected: propTypesExports.object,
+      isAllDay: propTypesExports.bool,
+      accessors: propTypesExports.object.isRequired,
+      localizer: propTypesExports.object.isRequired,
+      components: propTypesExports.object.isRequired,
+      getters: propTypesExports.object.isRequired,
+      onSelect: propTypesExports.func,
+      onDoubleClick: propTypesExports.func,
+      onKeyPress: propTypesExports.func
+    },
+    defaultProps: {
+      segments: [],
+      selected: {}
+    },
+    renderEvent: function renderEvent(props, event) {
+      var selected = props.selected;
+        props.isAllDay;
+        var accessors = props.accessors,
+        getters = props.getters,
+        onSelect = props.onSelect,
+        onDoubleClick = props.onDoubleClick,
+        onKeyPress = props.onKeyPress,
+        localizer = props.localizer,
+        slotMetrics = props.slotMetrics,
+        components = props.components,
+        resizable = props.resizable;
+      var continuesPrior = slotMetrics.continuesPrior(event);
+      var continuesAfter = slotMetrics.continuesAfter(event);
+      return /*#__PURE__*/React.createElement(EventCell, {
+        event: event,
+        getters: getters,
+        localizer: localizer,
+        accessors: accessors,
+        components: components,
+        onSelect: onSelect,
+        onDoubleClick: onDoubleClick,
+        onKeyPress: onKeyPress,
+        continuesPrior: continuesPrior,
+        continuesAfter: continuesAfter,
+        slotStart: slotMetrics.first,
+        slotEnd: slotMetrics.last,
+        selected: isSelected(event, selected),
+        resizable: resizable
+      });
+    },
+    renderSpan: function renderSpan(slots, len, key) {
+      var content = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : ' ';
+      var per = Math.abs(len) / slots * 100 + '%';
+      return /*#__PURE__*/React.createElement("div", {
+        key: key,
+        className: "rbc-row-segment"
+        // IE10/11 need max-width. flex-basis doesn't respect box-sizing
+        ,
+        style: {
+          WebkitFlexBasis: per,
+          flexBasis: per,
+          maxWidth: per
+        }
+      }, content);
+    }
+  };
+
+  var EventRow = /*#__PURE__*/function (_React$Component) {
+    _inherits(EventRow, _React$Component);
+    var _super = _createSuper(EventRow);
+    function EventRow() {
+      _classCallCheck(this, EventRow);
+      return _super.apply(this, arguments);
+    }
+    _createClass(EventRow, [{
+      key: "render",
+      value: function render() {
+        var _this = this;
+        var _this$props = this.props,
+          segments = _this$props.segments,
+          slots = _this$props.slotMetrics.slots,
+          className = _this$props.className;
+        var lastEnd = 1;
+        return /*#__PURE__*/React.createElement("div", {
+          className: clsx(className, 'rbc-row')
+        }, segments.reduce(function (row, _ref, li) {
+          var event = _ref.event,
+            left = _ref.left,
+            right = _ref.right,
+            span = _ref.span;
+          var key = '_lvl_' + li;
+          var gap = left - lastEnd;
+          var content = EventRowMixin.renderEvent(_this.props, event);
+          if (gap) row.push(EventRowMixin.renderSpan(slots, gap, "".concat(key, "_gap")));
+          row.push(EventRowMixin.renderSpan(slots, span, key, content));
+          lastEnd = right + 1;
+          return row;
+        }, []));
+      }
+    }]);
+    return EventRow;
+  }(React.Component);
+  EventRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
+
+  /**
+   * The base implementation of `_.findIndex` and `_.findLastIndex` without
+   * support for iteratee shorthands.
+   *
+   * @private
+   * @param {Array} array The array to inspect.
+   * @param {Function} predicate The function invoked per iteration.
+   * @param {number} fromIndex The index to search from.
+   * @param {boolean} [fromRight] Specify iterating from right to left.
+   * @returns {number} Returns the index of the matched value, else `-1`.
+   */
+
+  function baseFindIndex$1(array, predicate, fromIndex, fromRight) {
+    var length = array.length,
+        index = fromIndex + (fromRight ? 1 : -1);
+
+    while ((fromRight ? index-- : ++index < length)) {
+      if (predicate(array[index], index, array)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  var _baseFindIndex = baseFindIndex$1;
+
+  var Stack$1 = _Stack,
+      baseIsEqual$1 = _baseIsEqual;
+
+  /** Used to compose bitmasks for value comparisons. */
+  var COMPARE_PARTIAL_FLAG$1 = 1,
+      COMPARE_UNORDERED_FLAG$1 = 2;
+
+  /**
+   * The base implementation of `_.isMatch` without support for iteratee shorthands.
+   *
+   * @private
+   * @param {Object} object The object to inspect.
+   * @param {Object} source The object of property values to match.
+   * @param {Array} matchData The property names, values, and compare flags to match.
+   * @param {Function} [customizer] The function to customize comparisons.
+   * @returns {boolean} Returns `true` if `object` is a match, else `false`.
+   */
+  function baseIsMatch$1(object, source, matchData, customizer) {
+    var index = matchData.length,
+        length = index,
+        noCustomizer = !customizer;
+
+    if (object == null) {
+      return !length;
+    }
+    object = Object(object);
+    while (index--) {
+      var data = matchData[index];
+      if ((noCustomizer && data[2])
+            ? data[1] !== object[data[0]]
+            : !(data[0] in object)
+          ) {
+        return false;
+      }
+    }
+    while (++index < length) {
+      data = matchData[index];
+      var key = data[0],
+          objValue = object[key],
+          srcValue = data[1];
+
+      if (noCustomizer && data[2]) {
+        if (objValue === undefined && !(key in object)) {
+          return false;
+        }
+      } else {
+        var stack = new Stack$1;
+        if (customizer) {
+          var result = customizer(objValue, srcValue, key, object, source, stack);
+        }
+        if (!(result === undefined
+              ? baseIsEqual$1(srcValue, objValue, COMPARE_PARTIAL_FLAG$1 | COMPARE_UNORDERED_FLAG$1, customizer, stack)
+              : result
+            )) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  var _baseIsMatch = baseIsMatch$1;
+
+  var isObject$4 = isObject_1;
+
+  /**
+   * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
+   *
+   * @private
+   * @param {*} value The value to check.
+   * @returns {boolean} Returns `true` if `value` if suitable for strict
+   *  equality comparisons, else `false`.
+   */
+  function isStrictComparable$2(value) {
+    return value === value && !isObject$4(value);
+  }
+
+  var _isStrictComparable = isStrictComparable$2;
+
+  var isStrictComparable$1 = _isStrictComparable,
+      keys$4 = keys_1;
+
+  /**
+   * Gets the property names, values, and compare flags of `object`.
+   *
+   * @private
+   * @param {Object} object The object to query.
+   * @returns {Array} Returns the match data of `object`.
+   */
+  function getMatchData$1(object) {
+    var result = keys$4(object),
+        length = result.length;
+
+    while (length--) {
+      var key = result[length],
+          value = object[key];
+
+      result[length] = [key, value, isStrictComparable$1(value)];
+    }
+    return result;
+  }
+
+  var _getMatchData = getMatchData$1;
+
+  /**
+   * A specialized version of `matchesProperty` for source values suitable
+   * for strict equality comparisons, i.e. `===`.
+   *
+   * @private
+   * @param {string} key The key of the property to get.
+   * @param {*} srcValue The value to match.
+   * @returns {Function} Returns the new spec function.
+   */
+
+  function matchesStrictComparable$2(key, srcValue) {
+    return function(object) {
+      if (object == null) {
+        return false;
+      }
+      return object[key] === srcValue &&
+        (srcValue !== undefined || (key in Object(object)));
+    };
+  }
+
+  var _matchesStrictComparable = matchesStrictComparable$2;
+
+  var baseIsMatch = _baseIsMatch,
+      getMatchData = _getMatchData,
+      matchesStrictComparable$1 = _matchesStrictComparable;
+
+  /**
+   * The base implementation of `_.matches` which doesn't clone `source`.
+   *
+   * @private
+   * @param {Object} source The object of property values to match.
+   * @returns {Function} Returns the new spec function.
+   */
+  function baseMatches$1(source) {
+    var matchData = getMatchData(source);
+    if (matchData.length == 1 && matchData[0][2]) {
+      return matchesStrictComparable$1(matchData[0][0], matchData[0][1]);
+    }
+    return function(object) {
+      return object === source || baseIsMatch(object, source, matchData);
+    };
+  }
+
+  var _baseMatches = baseMatches$1;
+
+  var isArray$8 = isArray_1,
+      isSymbol$3 = isSymbol_1;
+
+  /** Used to match property names within property paths. */
+  var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
+      reIsPlainProp = /^\w*$/;
+
+  /**
+   * Checks if `value` is a property name and not a property path.
+   *
+   * @private
+   * @param {*} value The value to check.
+   * @param {Object} [object] The object to query keys on.
+   * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
+   */
+  function isKey$3(value, object) {
+    if (isArray$8(value)) {
+      return false;
+    }
+    var type = typeof value;
+    if (type == 'number' || type == 'symbol' || type == 'boolean' ||
+        value == null || isSymbol$3(value)) {
+      return true;
+    }
+    return reIsPlainProp.test(value) || !reIsDeepProp.test(value) ||
+      (object != null && value in Object(object));
+  }
+
+  var _isKey = isKey$3;
+
+  var MapCache = _MapCache;
+
+  /** Error message constants. */
+  var FUNC_ERROR_TEXT = 'Expected a function';
+
+  /**
+   * Creates a function that memoizes the result of `func`. If `resolver` is
+   * provided, it determines the cache key for storing the result based on the
+   * arguments provided to the memoized function. By default, the first argument
+   * provided to the memoized function is used as the map cache key. The `func`
+   * is invoked with the `this` binding of the memoized function.
+   *
+   * **Note:** The cache is exposed as the `cache` property on the memoized
+   * function. Its creation may be customized by replacing the `_.memoize.Cache`
+   * constructor with one whose instances implement the
+   * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
+   * method interface of `clear`, `delete`, `get`, `has`, and `set`.
+   *
+   * @static
+   * @memberOf _
+   * @since 0.1.0
+   * @category Function
+   * @param {Function} func The function to have its output memoized.
+   * @param {Function} [resolver] The function to resolve the cache key.
+   * @returns {Function} Returns the new memoized function.
+   * @example
+   *
+   * var object = { 'a': 1, 'b': 2 };
+   * var other = { 'c': 3, 'd': 4 };
+   *
+   * var values = _.memoize(_.values);
+   * values(object);
+   * // => [1, 2]
+   *
+   * values(other);
+   * // => [3, 4]
+   *
+   * object.a = 2;
+   * values(object);
+   * // => [1, 2]
+   *
+   * // Modify the result cache.
+   * values.cache.set(object, ['a', 'b']);
+   * values(object);
+   * // => ['a', 'b']
+   *
+   * // Replace `_.memoize.Cache`.
+   * _.memoize.Cache = WeakMap;
+   */
+  function memoize$1(func, resolver) {
+    if (typeof func != 'function' || (resolver != null && typeof resolver != 'function')) {
+      throw new TypeError(FUNC_ERROR_TEXT);
+    }
+    var memoized = function() {
+      var args = arguments,
+          key = resolver ? resolver.apply(this, args) : args[0],
+          cache = memoized.cache;
+
+      if (cache.has(key)) {
+        return cache.get(key);
+      }
+      var result = func.apply(this, args);
+      memoized.cache = cache.set(key, result) || cache;
+      return result;
+    };
+    memoized.cache = new (memoize$1.Cache || MapCache);
+    return memoized;
+  }
+
+  // Expose `MapCache`.
+  memoize$1.Cache = MapCache;
+
+  var memoize_1 = memoize$1;
+
+  var memoize = memoize_1;
+
+  /** Used as the maximum memoize cache size. */
+  var MAX_MEMOIZE_SIZE = 500;
+
+  /**
+   * A specialized version of `_.memoize` which clears the memoized function's
+   * cache when it exceeds `MAX_MEMOIZE_SIZE`.
+   *
+   * @private
+   * @param {Function} func The function to have its output memoized.
+   * @returns {Function} Returns the new memoized function.
+   */
+  function memoizeCapped$1(func) {
+    var result = memoize(func, function(key) {
+      if (cache.size === MAX_MEMOIZE_SIZE) {
+        cache.clear();
+      }
+      return key;
+    });
+
+    var cache = result.cache;
+    return result;
+  }
+
+  var _memoizeCapped = memoizeCapped$1;
+
+  var memoizeCapped = _memoizeCapped;
+
+  /** Used to match property names within property paths. */
+  var rePropName = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
+
+  /** Used to match backslashes in property paths. */
+  var reEscapeChar = /\\(\\)?/g;
+
+  /**
+   * Converts `string` to a property path array.
+   *
+   * @private
+   * @param {string} string The string to convert.
+   * @returns {Array} Returns the property path array.
+   */
+  var stringToPath$1 = memoizeCapped(function(string) {
+    var result = [];
+    if (string.charCodeAt(0) === 46 /* . */) {
+      result.push('');
+    }
+    string.replace(rePropName, function(match, number, quote, subString) {
+      result.push(quote ? subString.replace(reEscapeChar, '$1') : (number || match));
+    });
+    return result;
+  });
+
+  var _stringToPath = stringToPath$1;
+
+  /**
+   * A specialized version of `_.map` for arrays without support for iteratee
+   * shorthands.
+   *
+   * @private
+   * @param {Array} [array] The array to iterate over.
+   * @param {Function} iteratee The function invoked per iteration.
+   * @returns {Array} Returns the new mapped array.
+   */
+
+  function arrayMap$3(array, iteratee) {
+    var index = -1,
+        length = array == null ? 0 : array.length,
+        result = Array(length);
+
+    while (++index < length) {
+      result[index] = iteratee(array[index], index, array);
+    }
+    return result;
+  }
+
+  var _arrayMap = arrayMap$3;
+
+  var Symbol$3 = _Symbol,
+      arrayMap$2 = _arrayMap,
+      isArray$7 = isArray_1,
+      isSymbol$2 = isSymbol_1;
+
+  /** Used as references for various `Number` constants. */
+  var INFINITY$1 = 1 / 0;
+
+  /** Used to convert symbols to primitives and strings. */
+  var symbolProto$1 = Symbol$3 ? Symbol$3.prototype : undefined,
+      symbolToString = symbolProto$1 ? symbolProto$1.toString : undefined;
+
+  /**
+   * The base implementation of `_.toString` which doesn't convert nullish
+   * values to empty strings.
+   *
+   * @private
+   * @param {*} value The value to process.
+   * @returns {string} Returns the string.
+   */
+  function baseToString$1(value) {
+    // Exit early for strings to avoid a performance hit in some environments.
+    if (typeof value == 'string') {
+      return value;
+    }
+    if (isArray$7(value)) {
+      // Recursively convert values (susceptible to call stack limits).
+      return arrayMap$2(value, baseToString$1) + '';
+    }
+    if (isSymbol$2(value)) {
+      return symbolToString ? symbolToString.call(value) : '';
+    }
+    var result = (value + '');
+    return (result == '0' && (1 / value) == -INFINITY$1) ? '-0' : result;
+  }
+
+  var _baseToString = baseToString$1;
+
+  var baseToString = _baseToString;
+
+  /**
+   * Converts `value` to a string. An empty string is returned for `null`
+   * and `undefined` values. The sign of `-0` is preserved.
+   *
+   * @static
+   * @memberOf _
+   * @since 4.0.0
+   * @category Lang
+   * @param {*} value The value to convert.
+   * @returns {string} Returns the converted string.
+   * @example
+   *
+   * _.toString(null);
+   * // => ''
+   *
+   * _.toString(-0);
+   * // => '-0'
+   *
+   * _.toString([1, 2, 3]);
+   * // => '1,2,3'
+   */
+  function toString$1(value) {
+    return value == null ? '' : baseToString(value);
+  }
+
+  var toString_1 = toString$1;
+
+  var isArray$6 = isArray_1,
+      isKey$2 = _isKey,
+      stringToPath = _stringToPath,
+      toString = toString_1;
+
+  /**
+   * Casts `value` to a path array if it's not one.
+   *
+   * @private
+   * @param {*} value The value to inspect.
+   * @param {Object} [object] The object to query keys on.
+   * @returns {Array} Returns the cast property path array.
+   */
+  function castPath$4(value, object) {
+    if (isArray$6(value)) {
+      return value;
+    }
+    return isKey$2(value, object) ? [value] : stringToPath(toString(value));
+  }
+
+  var _castPath = castPath$4;
+
+  var isSymbol$1 = isSymbol_1;
+
+  /** Used as references for various `Number` constants. */
+  var INFINITY = 1 / 0;
+
+  /**
+   * Converts `value` to a string key if it's not a string or symbol.
+   *
+   * @private
+   * @param {*} value The value to inspect.
+   * @returns {string|symbol} Returns the key.
+   */
+  function toKey$5(value) {
+    if (typeof value == 'string' || isSymbol$1(value)) {
+      return value;
+    }
+    var result = (value + '');
+    return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+  }
+
+  var _toKey = toKey$5;
+
+  var castPath$3 = _castPath,
+      toKey$4 = _toKey;
+
+  /**
+   * The base implementation of `_.get` without support for default values.
+   *
+   * @private
+   * @param {Object} object The object to query.
+   * @param {Array|string} path The path of the property to get.
+   * @returns {*} Returns the resolved value.
+   */
+  function baseGet$4(object, path) {
+    path = castPath$3(path, object);
+
+    var index = 0,
+        length = path.length;
+
+    while (object != null && index < length) {
+      object = object[toKey$4(path[index++])];
+    }
+    return (index && index == length) ? object : undefined;
+  }
+
+  var _baseGet = baseGet$4;
+
+  var baseGet$3 = _baseGet;
+
+  /**
+   * Gets the value at `path` of `object`. If the resolved value is
+   * `undefined`, the `defaultValue` is returned in its place.
+   *
+   * @static
+   * @memberOf _
+   * @since 3.7.0
+   * @category Object
+   * @param {Object} object The object to query.
+   * @param {Array|string} path The path of the property to get.
+   * @param {*} [defaultValue] The value returned for `undefined` resolved values.
+   * @returns {*} Returns the resolved value.
+   * @example
+   *
+   * var object = { 'a': [{ 'b': { 'c': 3 } }] };
+   *
+   * _.get(object, 'a[0].b.c');
+   * // => 3
+   *
+   * _.get(object, ['a', '0', 'b', 'c']);
+   * // => 3
+   *
+   * _.get(object, 'a.b.c', 'default');
+   * // => 'default'
+   */
+  function get$1(object, path, defaultValue) {
+    var result = object == null ? undefined : baseGet$3(object, path);
+    return result === undefined ? defaultValue : result;
+  }
+
+  var get_1 = get$1;
+
+  /**
+   * The base implementation of `_.hasIn` without support for deep paths.
+   *
+   * @private
+   * @param {Object} [object] The object to query.
+   * @param {Array|string} key The key to check.
+   * @returns {boolean} Returns `true` if `key` exists, else `false`.
+   */
+
+  function baseHasIn$1(object, key) {
+    return object != null && key in Object(object);
+  }
+
+  var _baseHasIn = baseHasIn$1;
+
+  var castPath$2 = _castPath,
+      isArguments$1 = isArguments_1,
+      isArray$5 = isArray_1,
+      isIndex = _isIndex,
+      isLength = isLength_1,
+      toKey$3 = _toKey;
+
+  /**
+   * Checks if `path` exists on `object`.
+   *
+   * @private
+   * @param {Object} object The object to query.
+   * @param {Array|string} path The path to check.
+   * @param {Function} hasFunc The function to check properties.
+   * @returns {boolean} Returns `true` if `path` exists, else `false`.
+   */
+  function hasPath$1(object, path, hasFunc) {
+    path = castPath$2(path, object);
+
+    var index = -1,
+        length = path.length,
+        result = false;
+
+    while (++index < length) {
+      var key = toKey$3(path[index]);
+      if (!(result = object != null && hasFunc(object, key))) {
+        break;
+      }
+      object = object[key];
+    }
+    if (result || ++index != length) {
+      return result;
+    }
+    length = object == null ? 0 : object.length;
+    return !!length && isLength(length) && isIndex(key, length) &&
+      (isArray$5(object) || isArguments$1(object));
+  }
+
+  var _hasPath = hasPath$1;
+
+  var baseHasIn = _baseHasIn,
+      hasPath = _hasPath;
+
+  /**
+   * Checks if `path` is a direct or inherited property of `object`.
+   *
+   * @static
+   * @memberOf _
+   * @since 4.0.0
+   * @category Object
+   * @param {Object} object The object to query.
+   * @param {Array|string} path The path to check.
+   * @returns {boolean} Returns `true` if `path` exists, else `false`.
+   * @example
+   *
+   * var object = _.create({ 'a': _.create({ 'b': 2 }) });
+   *
+   * _.hasIn(object, 'a');
+   * // => true
+   *
+   * _.hasIn(object, 'a.b');
+   * // => true
+   *
+   * _.hasIn(object, ['a', 'b']);
+   * // => true
+   *
+   * _.hasIn(object, 'b');
+   * // => false
+   */
+  function hasIn$1(object, path) {
+    return object != null && hasPath(object, path, baseHasIn);
+  }
+
+  var hasIn_1 = hasIn$1;
+
+  var baseIsEqual = _baseIsEqual,
+      get = get_1,
+      hasIn = hasIn_1,
+      isKey$1 = _isKey,
+      isStrictComparable = _isStrictComparable,
+      matchesStrictComparable = _matchesStrictComparable,
+      toKey$2 = _toKey;
+
+  /** Used to compose bitmasks for value comparisons. */
+  var COMPARE_PARTIAL_FLAG = 1,
+      COMPARE_UNORDERED_FLAG = 2;
+
+  /**
+   * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
+   *
+   * @private
+   * @param {string} path The path of the property to get.
+   * @param {*} srcValue The value to match.
+   * @returns {Function} Returns the new spec function.
+   */
+  function baseMatchesProperty$1(path, srcValue) {
+    if (isKey$1(path) && isStrictComparable(srcValue)) {
+      return matchesStrictComparable(toKey$2(path), srcValue);
+    }
+    return function(object) {
+      var objValue = get(object, path);
+      return (objValue === undefined && objValue === srcValue)
+        ? hasIn(object, path)
+        : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
+    };
+  }
+
+  var _baseMatchesProperty = baseMatchesProperty$1;
+
+  /**
+   * This method returns the first argument it receives.
+   *
+   * @static
+   * @since 0.1.0
+   * @memberOf _
+   * @category Util
+   * @param {*} value Any value.
+   * @returns {*} Returns `value`.
+   * @example
+   *
+   * var object = { 'a': 1 };
+   *
+   * console.log(_.identity(object) === object);
+   * // => true
+   */
+
+  function identity$4(value) {
+    return value;
+  }
+
+  var identity_1 = identity$4;
+
+  /**
+   * The base implementation of `_.property` without support for deep paths.
+   *
+   * @private
+   * @param {string} key The key of the property to get.
+   * @returns {Function} Returns the new accessor function.
+   */
+
+  function baseProperty$1(key) {
+    return function(object) {
+      return object == null ? undefined : object[key];
+    };
+  }
+
+  var _baseProperty = baseProperty$1;
+
+  var baseGet$2 = _baseGet;
+
+  /**
+   * A specialized version of `baseProperty` which supports deep paths.
+   *
+   * @private
+   * @param {Array|string} path The path of the property to get.
+   * @returns {Function} Returns the new accessor function.
+   */
+  function basePropertyDeep$1(path) {
+    return function(object) {
+      return baseGet$2(object, path);
+    };
+  }
+
+  var _basePropertyDeep = basePropertyDeep$1;
+
+  var baseProperty = _baseProperty,
+      basePropertyDeep = _basePropertyDeep,
+      isKey = _isKey,
+      toKey$1 = _toKey;
+
+  /**
+   * Creates a function that returns the value at `path` of a given object.
+   *
+   * @static
+   * @memberOf _
+   * @since 2.4.0
+   * @category Util
+   * @param {Array|string} path The path of the property to get.
+   * @returns {Function} Returns the new accessor function.
+   * @example
+   *
+   * var objects = [
+   *   { 'a': { 'b': 2 } },
+   *   { 'a': { 'b': 1 } }
+   * ];
+   *
+   * _.map(objects, _.property('a.b'));
+   * // => [2, 1]
+   *
+   * _.map(_.sortBy(objects, _.property(['a', 'b'])), 'a.b');
+   * // => [1, 2]
+   */
+  function property$1(path) {
+    return isKey(path) ? baseProperty(toKey$1(path)) : basePropertyDeep(path);
+  }
+
+  var property_1 = property$1;
+
+  var baseMatches = _baseMatches,
+      baseMatchesProperty = _baseMatchesProperty,
+      identity$3 = identity_1,
+      isArray$4 = isArray_1,
+      property = property_1;
+
+  /**
+   * The base implementation of `_.iteratee`.
+   *
+   * @private
+   * @param {*} [value=_.identity] The value to convert to an iteratee.
+   * @returns {Function} Returns the iteratee.
+   */
+  function baseIteratee$4(value) {
+    // Don't store the `typeof` result in a variable to avoid a JIT bug in Safari 9.
+    // See https://bugs.webkit.org/show_bug.cgi?id=156034 for more details.
+    if (typeof value == 'function') {
+      return value;
+    }
+    if (value == null) {
+      return identity$3;
+    }
+    if (typeof value == 'object') {
+      return isArray$4(value)
+        ? baseMatchesProperty(value[0], value[1])
+        : baseMatches(value);
+    }
+    return property(value);
+  }
+
+  var _baseIteratee = baseIteratee$4;
+
+  var baseFindIndex = _baseFindIndex,
+      baseIteratee$3 = _baseIteratee,
+      toInteger = toInteger_1;
+
+  /* Built-in method references for those with the same name as other `lodash` methods. */
+  var nativeMax$2 = Math.max;
+
+  /**
+   * This method is like `_.find` except that it returns the index of the first
+   * element `predicate` returns truthy for instead of the element itself.
+   *
+   * @static
+   * @memberOf _
+   * @since 1.1.0
+   * @category Array
+   * @param {Array} array The array to inspect.
+   * @param {Function} [predicate=_.identity] The function invoked per iteration.
+   * @param {number} [fromIndex=0] The index to search from.
+   * @returns {number} Returns the index of the found element, else `-1`.
+   * @example
+   *
+   * var users = [
+   *   { 'user': 'barney',  'active': false },
+   *   { 'user': 'fred',    'active': false },
+   *   { 'user': 'pebbles', 'active': true }
+   * ];
+   *
+   * _.findIndex(users, function(o) { return o.user == 'barney'; });
+   * // => 0
+   *
+   * // The `_.matches` iteratee shorthand.
+   * _.findIndex(users, { 'user': 'fred', 'active': false });
+   * // => 1
+   *
+   * // The `_.matchesProperty` iteratee shorthand.
+   * _.findIndex(users, ['active', false]);
+   * // => 0
+   *
+   * // The `_.property` iteratee shorthand.
+   * _.findIndex(users, 'active');
+   * // => 2
+   */
+  function findIndex(array, predicate, fromIndex) {
+    var length = array == null ? 0 : array.length;
+    if (!length) {
+      return -1;
+    }
+    var index = fromIndex == null ? 0 : toInteger(fromIndex);
+    if (index < 0) {
+      index = nativeMax$2(length + index, 0);
+    }
+    return baseFindIndex(array, baseIteratee$3(predicate), index);
+  }
+
+  var findIndex_1 = findIndex;
+
+  function endOfRange(_ref) {
+    var dateRange = _ref.dateRange,
+      _ref$unit = _ref.unit,
+      unit = _ref$unit === void 0 ? 'day' : _ref$unit,
+      localizer = _ref.localizer;
+    return {
+      first: dateRange[0],
+      last: localizer.add(dateRange[dateRange.length - 1], 1, unit)
+    };
+  }
+
+  // properly calculating segments requires working with dates in
+  // the timezone we're working with, so we use the localizer
+  function eventSegments(event, range, accessors, localizer) {
+    var _endOfRange = endOfRange({
+        dateRange: range,
+        localizer: localizer
+      }),
+      first = _endOfRange.first,
+      last = _endOfRange.last;
+    var slots = localizer.diff(first, last, 'day');
+    var start = localizer.max(localizer.startOf(accessors.start(event), 'day'), first);
+    var end = localizer.min(localizer.ceil(accessors.end(event), 'day'), last);
+    var padding = findIndex_1(range, function (x) {
+      return localizer.isSameDate(x, start);
+    });
+    var span = localizer.diff(start, end, 'day');
+    span = Math.min(span, slots);
+    // The segmentOffset is necessary when adjusting for timezones
+    // ahead of the browser timezone
+    span = Math.max(span - localizer.segmentOffset, 1);
+    return {
+      event: event,
+      span: span,
+      left: padding + 1,
+      right: Math.max(padding + span, 1)
+    };
+  }
+  function eventLevels(rowSegments) {
+    var limit = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Infinity;
+    var i,
+      j,
+      seg,
+      levels = [],
+      extra = [];
+    for (i = 0; i < rowSegments.length; i++) {
+      seg = rowSegments[i];
+      for (j = 0; j < levels.length; j++) if (!segsOverlap(seg, levels[j])) break;
+      if (j >= limit) {
+        extra.push(seg);
+      } else {
+        (levels[j] || (levels[j] = [])).push(seg);
+      }
+    }
+    for (i = 0; i < levels.length; i++) {
+      levels[i].sort(function (a, b) {
+        return a.left - b.left;
+      }); //eslint-disable-line
+    }
+
+    return {
+      levels: levels,
+      extra: extra
+    };
+  }
+  function inRange(e, start, end, accessors, localizer) {
+    var event = {
+      start: accessors.start(e),
+      end: accessors.end(e)
+    };
+    var range = {
+      start: start,
+      end: end
+    };
+    return localizer.inEventRange({
+      event: event,
+      range: range
+    });
+  }
+  function segsOverlap(seg, otherSegs) {
+    return otherSegs.some(function (otherSeg) {
+      return otherSeg.left <= seg.right && otherSeg.right >= seg.left;
+    });
+  }
+  function sortEvents(eventA, eventB, accessors, localizer) {
+    var evtA = {
+      start: accessors.start(eventA),
+      end: accessors.end(eventA),
+      allDay: accessors.allDay(eventA)
+    };
+    var evtB = {
+      start: accessors.start(eventB),
+      end: accessors.end(eventB),
+      allDay: accessors.allDay(eventB)
+    };
+    return localizer.sortEvents({
+      evtA: evtA,
+      evtB: evtB
+    });
+  }
+
+  /* Built-in method references for those with the same name as other `lodash` methods. */
+
+  var nativeCeil = Math.ceil,
+      nativeMax$1 = Math.max;
+
+  /**
+   * The base implementation of `_.range` and `_.rangeRight` which doesn't
+   * coerce arguments.
+   *
+   * @private
+   * @param {number} start The start of the range.
+   * @param {number} end The end of the range.
+   * @param {number} step The value to increment or decrement by.
+   * @param {boolean} [fromRight] Specify iterating from right to left.
+   * @returns {Array} Returns the range of numbers.
+   */
+  function baseRange$1(start, end, step, fromRight) {
+    var index = -1,
+        length = nativeMax$1(nativeCeil((end - start) / (step || 1)), 0),
+        result = Array(length);
+
+    while (length--) {
+      result[fromRight ? length : ++index] = start;
+      start += step;
+    }
+    return result;
+  }
+
+  var _baseRange = baseRange$1;
+
+  var baseRange = _baseRange,
+      isIterateeCall$2 = _isIterateeCall,
+      toFinite = toFinite_1;
+
+  /**
+   * Creates a `_.range` or `_.rangeRight` function.
+   *
+   * @private
+   * @param {boolean} [fromRight] Specify iterating from right to left.
+   * @returns {Function} Returns the new range function.
+   */
+  function createRange$1(fromRight) {
+    return function(start, end, step) {
+      if (step && typeof step != 'number' && isIterateeCall$2(start, end, step)) {
+        end = step = undefined;
+      }
+      // Ensure the sign of `-0` is preserved.
+      start = toFinite(start);
+      if (end === undefined) {
+        end = start;
+        start = 0;
+      } else {
+        end = toFinite(end);
+      }
+      step = step === undefined ? (start < end ? 1 : -1) : toFinite(step);
+      return baseRange(start, end, step, fromRight);
+    };
+  }
+
+  var _createRange = createRange$1;
+
+  var createRange = _createRange;
+
+  /**
+   * Creates an array of numbers (positive and/or negative) progressing from
+   * `start` up to, but not including, `end`. A step of `-1` is used if a negative
+   * `start` is specified without an `end` or `step`. If `end` is not specified,
+   * it's set to `start` with `start` then set to `0`.
+   *
+   * **Note:** JavaScript follows the IEEE-754 standard for resolving
+   * floating-point values which can produce unexpected results.
+   *
+   * @static
+   * @since 0.1.0
+   * @memberOf _
+   * @category Util
+   * @param {number} [start=0] The start of the range.
+   * @param {number} end The end of the range.
+   * @param {number} [step=1] The value to increment or decrement by.
+   * @returns {Array} Returns the range of numbers.
+   * @see _.inRange, _.rangeRight
+   * @example
+   *
+   * _.range(4);
+   * // => [0, 1, 2, 3]
+   *
+   * _.range(-4);
+   * // => [0, -1, -2, -3]
+   *
+   * _.range(1, 5);
+   * // => [1, 2, 3, 4]
+   *
+   * _.range(0, 20, 5);
+   * // => [0, 5, 10, 15]
+   *
+   * _.range(0, -4, -1);
+   * // => [0, -1, -2, -3]
+   *
+   * _.range(1, 4, 0);
+   * // => [1, 1, 1]
+   *
+   * _.range(0);
+   * // => []
+   */
+  var range = createRange();
+
+  var range_1 = range;
+
+  var isSegmentInSlot$1 = function isSegmentInSlot(seg, slot) {
+    return seg.left <= slot && seg.right >= slot;
+  };
+  var eventsInSlot = function eventsInSlot(segments, slot) {
+    return segments.filter(function (seg) {
+      return isSegmentInSlot$1(seg, slot);
+    }).length;
+  };
+  var EventEndingRow = /*#__PURE__*/function (_React$Component) {
+    _inherits(EventEndingRow, _React$Component);
+    var _super = _createSuper(EventEndingRow);
+    function EventEndingRow() {
+      _classCallCheck(this, EventEndingRow);
+      return _super.apply(this, arguments);
+    }
+    _createClass(EventEndingRow, [{
+      key: "render",
+      value: function render() {
+        var _this$props = this.props,
+          segments = _this$props.segments,
+          slots = _this$props.slotMetrics.slots;
+        var rowSegments = eventLevels(segments).levels[0];
+        var current = 1,
+          lastEnd = 1,
+          row = [];
+        while (current <= slots) {
+          var key = '_lvl_' + current;
+          var _ref = rowSegments.filter(function (seg) {
+              return isSegmentInSlot$1(seg, current);
+            })[0] || {},
+            event = _ref.event,
+            left = _ref.left,
+            right = _ref.right,
+            span = _ref.span; //eslint-disable-line
+
+          if (!event) {
+            current++;
+            continue;
+          }
+          var gap = Math.max(0, left - lastEnd);
+          if (this.canRenderSlotEvent(left, span)) {
+            var content = EventRowMixin.renderEvent(this.props, event);
+            if (gap) {
+              row.push(EventRowMixin.renderSpan(slots, gap, key + '_gap'));
+            }
+            row.push(EventRowMixin.renderSpan(slots, span, key, content));
+            lastEnd = current = right + 1;
+          } else {
+            if (gap) {
+              row.push(EventRowMixin.renderSpan(slots, gap, key + '_gap'));
+            }
+            row.push(EventRowMixin.renderSpan(slots, 1, key, this.renderShowMore(segments, current)));
+            lastEnd = current = current + 1;
+          }
+        }
+        return /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row"
+        }, row);
+      }
+    }, {
+      key: "canRenderSlotEvent",
+      value: function canRenderSlotEvent(slot, span) {
+        var segments = this.props.segments;
+        return range_1(slot, slot + span).every(function (s) {
+          var count = eventsInSlot(segments, s);
+          return count === 1;
+        });
+      }
+    }, {
+      key: "renderShowMore",
+      value: function renderShowMore(segments, slot) {
+        var _this = this;
+        var localizer = this.props.localizer;
+        var count = eventsInSlot(segments, slot);
+        return count ? /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          key: 'sm_' + slot,
+          className: clsx('rbc-button-link', 'rbc-show-more'),
+          onClick: function onClick(e) {
+            return _this.showMore(slot, e);
+          }
+        }, localizer.messages.showMore(count)) : false;
+      }
+    }, {
+      key: "showMore",
+      value: function showMore(slot, e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.props.onShowMore(slot, e.target);
+      }
+    }]);
+    return EventEndingRow;
+  }(React.Component);
+  EventEndingRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
+
+  var ScrollableWeekWrapper = function ScrollableWeekWrapper(_ref) {
+    var children = _ref.children;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "rbc-row-content-scroll-container"
+    }, children);
+  };
+
+  var safeIsNaN = Number.isNaN ||
+      function ponyfill(value) {
+          return typeof value === 'number' && value !== value;
+      };
+  function isEqual$1(first, second) {
+      if (first === second) {
+          return true;
+      }
+      if (safeIsNaN(first) && safeIsNaN(second)) {
+          return true;
+      }
+      return false;
+  }
+  function areInputsEqual(newInputs, lastInputs) {
+      if (newInputs.length !== lastInputs.length) {
+          return false;
+      }
+      for (var i = 0; i < newInputs.length; i++) {
+          if (!isEqual$1(newInputs[i], lastInputs[i])) {
+              return false;
+          }
+      }
+      return true;
+  }
+
+  function memoizeOne(resultFn, isEqual) {
+      if (isEqual === void 0) { isEqual = areInputsEqual; }
+      var cache = null;
+      function memoized() {
+          var newArgs = [];
+          for (var _i = 0; _i < arguments.length; _i++) {
+              newArgs[_i] = arguments[_i];
+          }
+          if (cache && cache.lastThis === this && isEqual(newArgs, cache.lastArgs)) {
+              return cache.lastResult;
+          }
+          var lastResult = resultFn.apply(this, newArgs);
+          cache = {
+              lastResult: lastResult,
+              lastArgs: newArgs,
+              lastThis: this,
+          };
+          return lastResult;
+      }
+      memoized.clear = function clear() {
+          cache = null;
+      };
+      return memoized;
+  }
+
+  var isSegmentInSlot = function isSegmentInSlot(seg, slot) {
+    return seg.left <= slot && seg.right >= slot;
+  };
+  var isEqual = function isEqual(a, b) {
+    return a[0].range === b[0].range && a[0].events === b[0].events;
+  };
+  function getSlotMetrics$1() {
+    return memoizeOne(function (options) {
+      var range = options.range,
+        events = options.events,
+        maxRows = options.maxRows,
+        minRows = options.minRows,
+        accessors = options.accessors,
+        localizer = options.localizer;
+      var _endOfRange = endOfRange({
+          dateRange: range,
+          localizer: localizer
+        }),
+        first = _endOfRange.first,
+        last = _endOfRange.last;
+      var segments = events.map(function (evt) {
+        return eventSegments(evt, range, accessors, localizer);
+      });
+      var _eventLevels = eventLevels(segments, Math.max(maxRows - 1, 1)),
+        levels = _eventLevels.levels,
+        extra = _eventLevels.extra;
+      // Subtract 1 from minRows to not include showMore button row when
+      // it would be rendered
+      var minEventRows = extra.length > 0 ? minRows - 1 : minRows;
+      while (levels.length < minEventRows) levels.push([]);
+      return {
+        first: first,
+        last: last,
+        levels: levels,
+        extra: extra,
+        range: range,
+        slots: range.length,
+        clone: function clone(args) {
+          var metrics = getSlotMetrics$1();
+          return metrics(_objectSpread2(_objectSpread2({}, options), args));
+        },
+        getDateForSlot: function getDateForSlot(slotNumber) {
+          return range[slotNumber];
+        },
+        getSlotForDate: function getSlotForDate(date) {
+          return range.find(function (r) {
+            return localizer.isSameDate(r, date);
+          });
+        },
+        getEventsForSlot: function getEventsForSlot(slot) {
+          return segments.filter(function (seg) {
+            return isSegmentInSlot(seg, slot);
+          }).map(function (seg) {
+            return seg.event;
+          });
+        },
+        continuesPrior: function continuesPrior(event) {
+          return localizer.continuesPrior(accessors.start(event), first);
+        },
+        continuesAfter: function continuesAfter(event) {
+          var start = accessors.start(event);
+          var end = accessors.end(event);
+          return localizer.continuesAfter(start, end, last);
+        }
+      };
+    }, isEqual);
+  }
+
+  var DateContentRow = /*#__PURE__*/function (_React$Component) {
+    _inherits(DateContentRow, _React$Component);
+    var _super = _createSuper(DateContentRow);
+    function DateContentRow() {
+      var _this;
+      _classCallCheck(this, DateContentRow);
+      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+        args[_key] = arguments[_key];
+      }
+      _this = _super.call.apply(_super, [this].concat(args));
+      _this.handleSelectSlot = function (slot) {
+        var _this$props = _this.props,
+          range = _this$props.range,
+          onSelectSlot = _this$props.onSelectSlot;
+        onSelectSlot(range.slice(slot.start, slot.end + 1), slot);
+      };
+      _this.handleShowMore = function (slot, target) {
+        var _this$props2 = _this.props,
+          range = _this$props2.range,
+          onShowMore = _this$props2.onShowMore;
+        var metrics = _this.slotMetrics(_this.props);
+        var row = qsa(_this.containerRef.current, '.rbc-row-bg')[0];
+        var cell;
+        if (row) cell = row.children[slot - 1];
+        var events = metrics.getEventsForSlot(slot);
+        onShowMore(events, range[slot - 1], cell, slot, target);
+      };
+      _this.getContainer = function () {
+        var container = _this.props.container;
+        return container ? container() : _this.containerRef.current;
+      };
+      _this.renderHeadingCell = function (date, index) {
+        var _this$props3 = _this.props,
+          renderHeader = _this$props3.renderHeader,
+          getNow = _this$props3.getNow,
+          localizer = _this$props3.localizer;
+        return renderHeader({
+          date: date,
+          key: "header_".concat(index),
+          className: clsx('rbc-date-cell', localizer.isSameDate(date, getNow()) && 'rbc-now')
+        });
+      };
+      _this.renderDummy = function () {
+        var _this$props4 = _this.props,
+          className = _this$props4.className,
+          range = _this$props4.range,
+          renderHeader = _this$props4.renderHeader,
+          showAllEvents = _this$props4.showAllEvents;
+        return /*#__PURE__*/React.createElement("div", {
+          className: className,
+          ref: _this.containerRef
+        }, /*#__PURE__*/React.createElement("div", {
+          className: clsx('rbc-row-content', showAllEvents && 'rbc-row-content-scrollable')
+        }, renderHeader && /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row",
+          ref: _this.headingRowRef
+        }, range.map(_this.renderHeadingCell)), /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row",
+          ref: _this.eventRowRef
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row-segment"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "rbc-event"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "rbc-event-content"
+        }, "\xA0"))))));
+      };
+      _this.containerRef = /*#__PURE__*/reactExports.createRef();
+      _this.headingRowRef = /*#__PURE__*/reactExports.createRef();
+      _this.eventRowRef = /*#__PURE__*/reactExports.createRef();
+      _this.slotMetrics = getSlotMetrics$1();
+      return _this;
+    }
+    _createClass(DateContentRow, [{
+      key: "getRowLimit",
+      value: function getRowLimit() {
+        var _this$headingRowRef;
+        /* Guessing this only gets called on the dummyRow */
+        var eventHeight = height(this.eventRowRef.current);
+        var headingHeight = (_this$headingRowRef = this.headingRowRef) !== null && _this$headingRowRef !== void 0 && _this$headingRowRef.current ? height(this.headingRowRef.current) : 0;
+        var eventSpace = height(this.containerRef.current) - headingHeight;
+        return Math.max(Math.floor(eventSpace / eventHeight), 1);
+      }
+    }, {
+      key: "render",
+      value: function render() {
+        var _this$props5 = this.props,
+          date = _this$props5.date,
+          rtl = _this$props5.rtl,
+          range = _this$props5.range,
+          className = _this$props5.className,
+          selected = _this$props5.selected,
+          selectable = _this$props5.selectable,
+          renderForMeasure = _this$props5.renderForMeasure,
+          accessors = _this$props5.accessors,
+          getters = _this$props5.getters,
+          components = _this$props5.components,
+          getNow = _this$props5.getNow,
+          renderHeader = _this$props5.renderHeader,
+          onSelect = _this$props5.onSelect,
+          localizer = _this$props5.localizer,
+          onSelectStart = _this$props5.onSelectStart,
+          onSelectEnd = _this$props5.onSelectEnd,
+          onDoubleClick = _this$props5.onDoubleClick,
+          onKeyPress = _this$props5.onKeyPress,
+          resourceId = _this$props5.resourceId,
+          longPressThreshold = _this$props5.longPressThreshold,
+          isAllDay = _this$props5.isAllDay,
+          resizable = _this$props5.resizable,
+          showAllEvents = _this$props5.showAllEvents;
+        if (renderForMeasure) return this.renderDummy();
+        var metrics = this.slotMetrics(this.props);
+        var levels = metrics.levels,
+          extra = metrics.extra;
+        var ScrollableWeekComponent = showAllEvents ? ScrollableWeekWrapper : NoopWrapper;
+        var WeekWrapper = components.weekWrapper;
+        var eventRowProps = {
+          selected: selected,
+          accessors: accessors,
+          getters: getters,
+          localizer: localizer,
+          components: components,
+          onSelect: onSelect,
+          onDoubleClick: onDoubleClick,
+          onKeyPress: onKeyPress,
+          resourceId: resourceId,
+          slotMetrics: metrics,
+          resizable: resizable
+        };
+        return /*#__PURE__*/React.createElement("div", {
+          className: className,
+          role: "rowgroup",
+          ref: this.containerRef
+        }, /*#__PURE__*/React.createElement(BackgroundCells, {
+          localizer: localizer,
+          date: date,
+          getNow: getNow,
+          rtl: rtl,
+          range: range,
+          selectable: selectable,
+          container: this.getContainer,
+          getters: getters,
+          onSelectStart: onSelectStart,
+          onSelectEnd: onSelectEnd,
+          onSelectSlot: this.handleSelectSlot,
+          components: components,
+          longPressThreshold: longPressThreshold,
+          resourceId: resourceId
+        }), /*#__PURE__*/React.createElement("div", {
+          className: clsx('rbc-row-content', showAllEvents && 'rbc-row-content-scrollable'),
+          role: "row"
+        }, renderHeader && /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row ",
+          ref: this.headingRowRef
+        }, range.map(this.renderHeadingCell)), /*#__PURE__*/React.createElement(ScrollableWeekComponent, null, /*#__PURE__*/React.createElement(WeekWrapper, Object.assign({
+          isAllDay: isAllDay
+        }, eventRowProps, {
+          rtl: this.props.rtl
+        }), levels.map(function (segs, idx) {
+          return /*#__PURE__*/React.createElement(EventRow, Object.assign({
+            key: idx,
+            segments: segs
+          }, eventRowProps));
+        }), !!extra.length && /*#__PURE__*/React.createElement(EventEndingRow, Object.assign({
+          segments: extra,
+          onShowMore: this.handleShowMore
+        }, eventRowProps))))));
+      }
+    }]);
+    return DateContentRow;
+  }(React.Component);
+  DateContentRow.defaultProps = {
+    minRows: 0,
+    maxRows: Infinity
+  };
+
+  var Header = function Header(_ref) {
+    var label = _ref.label;
+    return /*#__PURE__*/React.createElement("span", {
+      role: "columnheader",
+      "aria-sort": "none"
+    }, label);
+  };
+
+  var DateHeader = function DateHeader(_ref) {
+    var label = _ref.label,
+      drilldownView = _ref.drilldownView,
+      onDrillDown = _ref.onDrillDown;
+    if (!drilldownView) {
+      return /*#__PURE__*/React.createElement("span", null, label);
+    }
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "rbc-button-link",
+      onClick: onDrillDown,
+      role: "cell"
+    }, label);
+  };
+
+  var _excluded$6 = ["date", "className"];
+  var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
+    return evts.filter(function (e) {
+      return inRange(e, start, end, accessors, localizer);
+    });
+  };
+  var MonthView = /*#__PURE__*/function (_React$Component) {
+    _inherits(MonthView, _React$Component);
+    var _super = _createSuper(MonthView);
+    function MonthView() {
+      var _this;
+      _classCallCheck(this, MonthView);
+      for (var _len = arguments.length, _args = new Array(_len), _key = 0; _key < _len; _key++) {
+        _args[_key] = arguments[_key];
+      }
+      _this = _super.call.apply(_super, [this].concat(_args));
+      _this.getContainer = function () {
+        return _this.containerRef.current;
+      };
+      _this.renderWeek = function (week, weekIdx) {
+        var _this$props = _this.props,
+          events = _this$props.events,
+          components = _this$props.components,
+          selectable = _this$props.selectable,
+          getNow = _this$props.getNow,
+          selected = _this$props.selected,
+          date = _this$props.date,
+          localizer = _this$props.localizer,
+          longPressThreshold = _this$props.longPressThreshold,
+          accessors = _this$props.accessors,
+          getters = _this$props.getters,
+          showAllEvents = _this$props.showAllEvents;
+        var _this$state = _this.state,
+          needLimitMeasure = _this$state.needLimitMeasure,
+          rowLimit = _this$state.rowLimit;
+
+        // let's not mutate props
+        var weeksEvents = eventsForWeek(_toConsumableArray(events), week[0], week[week.length - 1], accessors, localizer);
+        weeksEvents.sort(function (a, b) {
+          return sortEvents(a, b, accessors, localizer);
+        });
+        return /*#__PURE__*/React.createElement(DateContentRow, {
+          key: weekIdx,
+          ref: weekIdx === 0 ? _this.slotRowRef : undefined,
+          container: _this.getContainer,
+          className: "rbc-month-row",
+          getNow: getNow,
+          date: date,
+          range: week,
+          events: weeksEvents,
+          maxRows: showAllEvents ? Infinity : rowLimit,
+          selected: selected,
+          selectable: selectable,
+          components: components,
+          accessors: accessors,
+          getters: getters,
+          localizer: localizer,
+          renderHeader: _this.readerDateHeading,
+          renderForMeasure: needLimitMeasure,
+          onShowMore: _this.handleShowMore,
+          onSelect: _this.handleSelectEvent,
+          onDoubleClick: _this.handleDoubleClickEvent,
+          onKeyPress: _this.handleKeyPressEvent,
+          onSelectSlot: _this.handleSelectSlot,
+          longPressThreshold: longPressThreshold,
+          rtl: _this.props.rtl,
+          resizable: _this.props.resizable,
+          showAllEvents: showAllEvents
+        });
+      };
+      _this.readerDateHeading = function (_ref) {
+        var date = _ref.date,
+          className = _ref.className,
+          props = _objectWithoutProperties(_ref, _excluded$6);
+        var _this$props2 = _this.props,
+          currentDate = _this$props2.date,
+          getDrilldownView = _this$props2.getDrilldownView,
+          localizer = _this$props2.localizer;
+        var isOffRange = localizer.neq(date, currentDate, 'month');
+        var isCurrent = localizer.isSameDate(date, currentDate);
+        var drilldownView = getDrilldownView(date);
+        var label = localizer.format(date, 'dateFormat');
+        var DateHeaderComponent = _this.props.components.dateHeader || DateHeader;
+        return /*#__PURE__*/React.createElement("div", Object.assign({}, props, {
+          className: clsx(className, isOffRange && 'rbc-off-range', isCurrent && 'rbc-current'),
+          role: "cell"
+        }), /*#__PURE__*/React.createElement(DateHeaderComponent, {
+          label: label,
+          date: date,
+          drilldownView: drilldownView,
+          isOffRange: isOffRange,
+          onDrillDown: function onDrillDown(e) {
+            return _this.handleHeadingClick(date, drilldownView, e);
+          }
+        }));
+      };
+      _this.handleSelectSlot = function (range, slotInfo) {
+        _this._pendingSelection = _this._pendingSelection.concat(range);
+        clearTimeout(_this._selectTimer);
+        _this._selectTimer = setTimeout(function () {
+          return _this.selectDates(slotInfo);
+        });
+      };
+      _this.handleHeadingClick = function (date, view, e) {
+        e.preventDefault();
+        _this.clearSelection();
+        notify(_this.props.onDrillDown, [date, view]);
+      };
+      _this.handleSelectEvent = function () {
+        _this.clearSelection();
+        for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+          args[_key2] = arguments[_key2];
+        }
+        notify(_this.props.onSelectEvent, args);
+      };
+      _this.handleDoubleClickEvent = function () {
+        _this.clearSelection();
+        for (var _len3 = arguments.length, args = new Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+          args[_key3] = arguments[_key3];
+        }
+        notify(_this.props.onDoubleClickEvent, args);
+      };
+      _this.handleKeyPressEvent = function () {
+        _this.clearSelection();
+        for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+          args[_key4] = arguments[_key4];
+        }
+        notify(_this.props.onKeyPressEvent, args);
+      };
+      _this.handleShowMore = function (events, date, cell, slot, target) {
+        var _this$props3 = _this.props,
+          popup = _this$props3.popup,
+          onDrillDown = _this$props3.onDrillDown,
+          onShowMore = _this$props3.onShowMore,
+          getDrilldownView = _this$props3.getDrilldownView,
+          doShowMoreDrillDown = _this$props3.doShowMoreDrillDown;
+        //cancel any pending selections so only the event click goes through.
+        _this.clearSelection();
+        if (popup) {
+          var position$1 = position(cell, _this.containerRef.current);
+          _this.setState({
+            overlay: {
+              date: date,
+              events: events,
+              position: position$1,
+              target: target
+            }
+          });
+        } else if (doShowMoreDrillDown) {
+          notify(onDrillDown, [date, getDrilldownView(date) || views.DAY]);
+        }
+        notify(onShowMore, [events, date, slot]);
+      };
+      _this.overlayDisplay = function () {
+        _this.setState({
+          overlay: null
+        });
+      };
+      _this.state = {
+        rowLimit: 5,
+        needLimitMeasure: true,
+        date: null
+      };
+      _this.containerRef = /*#__PURE__*/reactExports.createRef();
+      _this.slotRowRef = /*#__PURE__*/reactExports.createRef();
+      _this._bgRows = [];
+      _this._pendingSelection = [];
+      return _this;
+    }
+    _createClass(MonthView, [{
+      key: "componentDidMount",
+      value: function componentDidMount() {
+        var _this2 = this;
+        var running;
+        if (this.state.needLimitMeasure) this.measureRowLimit(this.props);
+        window.addEventListener('resize', this._resizeListener = function () {
+          if (!running) {
+            request(function () {
+              running = false;
+              _this2.setState({
+                needLimitMeasure: true
+              }); //eslint-disable-line
+            });
+          }
+        }, false);
+      }
+    }, {
+      key: "componentDidUpdate",
+      value: function componentDidUpdate() {
+        if (this.state.needLimitMeasure) this.measureRowLimit(this.props);
+      }
+    }, {
+      key: "componentWillUnmount",
+      value: function componentWillUnmount() {
+        window.removeEventListener('resize', this._resizeListener, false);
+      }
+    }, {
+      key: "render",
+      value: function render() {
+        var _this$props4 = this.props,
+          date = _this$props4.date,
+          localizer = _this$props4.localizer,
+          className = _this$props4.className,
+          month = localizer.visibleDays(date, localizer),
+          weeks = chunk_1(month, 7);
+        this._weekCount = weeks.length;
+        return /*#__PURE__*/React.createElement("div", {
+          className: clsx('rbc-month-view', className),
+          role: "table",
+          "aria-label": "Month View",
+          ref: this.containerRef
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "rbc-row rbc-month-header",
+          role: "row"
+        }, this.renderHeaders(weeks[0])), weeks.map(this.renderWeek), this.props.popup && this.renderOverlay());
+      }
+    }, {
+      key: "renderHeaders",
+      value: function renderHeaders(row) {
+        var _this$props5 = this.props,
+          localizer = _this$props5.localizer,
+          components = _this$props5.components;
+        var first = row[0];
+        var last = row[row.length - 1];
+        var HeaderComponent = components.header || Header;
+        return localizer.range(first, last, 'day').map(function (day, idx) {
+          return /*#__PURE__*/React.createElement("div", {
+            key: 'header_' + idx,
+            className: "rbc-header"
+          }, /*#__PURE__*/React.createElement(HeaderComponent, {
+            date: day,
+            localizer: localizer,
+            label: localizer.format(day, 'weekdayFormat')
+          }));
+        });
+      }
+    }, {
+      key: "renderOverlay",
+      value: function renderOverlay() {
+        var _this$state$overlay,
+          _this$state2,
+          _this3 = this;
+        var overlay = (_this$state$overlay = (_this$state2 = this.state) === null || _this$state2 === void 0 ? void 0 : _this$state2.overlay) !== null && _this$state$overlay !== void 0 ? _this$state$overlay : {};
+        var _this$props6 = this.props,
+          accessors = _this$props6.accessors,
+          localizer = _this$props6.localizer,
+          components = _this$props6.components,
+          getters = _this$props6.getters,
+          selected = _this$props6.selected,
+          popupOffset = _this$props6.popupOffset,
+          handleDragStart = _this$props6.handleDragStart;
+        var onHide = function onHide() {
+          return _this3.setState({
+            overlay: null
+          });
+        };
+        return /*#__PURE__*/React.createElement(PopOverlay, {
+          overlay: overlay,
+          accessors: accessors,
+          localizer: localizer,
+          components: components,
+          getters: getters,
+          selected: selected,
+          popupOffset: popupOffset,
+          ref: this.containerRef,
+          handleKeyPressEvent: this.handleKeyPressEvent,
+          handleSelectEvent: this.handleSelectEvent,
+          handleDoubleClickEvent: this.handleDoubleClickEvent,
+          handleDragStart: handleDragStart,
+          show: !!overlay.position,
+          overlayDisplay: this.overlayDisplay,
+          onHide: onHide
+        });
+
+        /* return (
+          <Overlay
+            rootClose
+            placement="bottom"
+            show={!!overlay.position}
+            onHide={() => this.setState({ overlay: null })}
+            target={() => overlay.target}
+          >
+            {({ props }) => (
+              <Popup
+                {...props}
+                popupOffset={popupOffset}
+                accessors={accessors}
+                getters={getters}
+                selected={selected}
+                components={components}
+                localizer={localizer}
+                position={overlay.position}
+                show={this.overlayDisplay}
+                events={overlay.events}
+                slotStart={overlay.date}
+                slotEnd={overlay.end}
+                onSelect={this.handleSelectEvent}
+                onDoubleClick={this.handleDoubleClickEvent}
+                onKeyPress={this.handleKeyPressEvent}
+                handleDragStart={this.props.handleDragStart}
+              />
+            )}
+          </Overlay>
+        ) */
+      }
+    }, {
+      key: "measureRowLimit",
+      value: function measureRowLimit() {
+        this.setState({
+          needLimitMeasure: false,
+          rowLimit: this.slotRowRef.current.getRowLimit()
+        });
+      }
+    }, {
+      key: "selectDates",
+      value: function selectDates(slotInfo) {
+        var slots = this._pendingSelection.slice();
+        this._pendingSelection = [];
+        slots.sort(function (a, b) {
+          return +a - +b;
+        });
+        var start = new Date(slots[0]);
+        var end = new Date(slots[slots.length - 1]);
+        end.setDate(slots[slots.length - 1].getDate() + 1);
+        notify(this.props.onSelectSlot, {
+          slots: slots,
+          start: start,
+          end: end,
+          action: slotInfo.action,
+          bounds: slotInfo.bounds,
+          box: slotInfo.box
+        });
+      }
+    }, {
+      key: "clearSelection",
+      value: function clearSelection() {
+        clearTimeout(this._selectTimer);
+        this._pendingSelection = [];
+      }
+    }], [{
+      key: "getDerivedStateFromProps",
+      value: function getDerivedStateFromProps(_ref2, state) {
+        var date = _ref2.date,
+          localizer = _ref2.localizer;
+        return {
+          date: date,
+          needLimitMeasure: localizer.neq(date, state.date, 'month')
+        };
+      }
+    }]);
+    return MonthView;
+  }(React.Component);
+  MonthView.range = function (date, _ref3) {
+    var localizer = _ref3.localizer;
+    var start = localizer.firstVisibleDay(date, localizer);
+    var end = localizer.lastVisibleDay(date, localizer);
+    return {
+      start: start,
+      end: end
+    };
+  };
+  MonthView.navigate = function (date, action, _ref4) {
+    var localizer = _ref4.localizer;
+    switch (action) {
+      case navigate.PREVIOUS:
+        return localizer.add(date, -1, 'month');
+      case navigate.NEXT:
+        return localizer.add(date, 1, 'month');
+      default:
+        return date;
+    }
+  };
+  MonthView.title = function (date, _ref5) {
+    var localizer = _ref5.localizer;
+    return localizer.format(date, 'monthHeaderFormat');
+  };
+
+  var getKey = function getKey(_ref) {
+    var min = _ref.min,
+      max = _ref.max,
+      step = _ref.step,
+      slots = _ref.slots,
+      localizer = _ref.localizer;
+    return "".concat(+localizer.startOf(min, 'minutes')) + "".concat(+localizer.startOf(max, 'minutes')) + "".concat(step, "-").concat(slots);
+  };
+  function getSlotMetrics(_ref2) {
+    var start = _ref2.min,
+      end = _ref2.max,
+      step = _ref2.step,
+      timeslots = _ref2.timeslots,
+      localizer = _ref2.localizer;
+    var key = getKey({
+      start: start,
+      end: end,
+      step: step,
+      timeslots: timeslots,
+      localizer: localizer
+    });
+
+    // DST differences are handled inside the localizer
+    var totalMin = 1 + localizer.getTotalMin(start, end);
+    var minutesFromMidnight = localizer.getMinutesFromMidnight(start);
+    var numGroups = Math.ceil((totalMin - 1) / (step * timeslots));
+    var numSlots = numGroups * timeslots;
+    var groups = new Array(numGroups);
+    var slots = new Array(numSlots);
+    // Each slot date is created from "zero", instead of adding `step` to
+    // the previous one, in order to avoid DST oddities
+    for (var grp = 0; grp < numGroups; grp++) {
+      groups[grp] = new Array(timeslots);
+      for (var slot = 0; slot < timeslots; slot++) {
+        var slotIdx = grp * timeslots + slot;
+        var minFromStart = slotIdx * step;
+        // A date with total minutes calculated from the start of the day
+        slots[slotIdx] = groups[grp][slot] = localizer.getSlotDate(start, minutesFromMidnight, minFromStart);
+      }
+    }
+
+    // Necessary to be able to select up until the last timeslot in a day
+    var lastSlotMinFromStart = slots.length * step;
+    slots.push(localizer.getSlotDate(start, minutesFromMidnight, lastSlotMinFromStart));
+    function positionFromDate(date) {
+      var diff = localizer.diff(start, date, 'minutes') + localizer.getDstOffset(start, date);
+      return Math.min(diff, totalMin);
+    }
+    return {
+      groups: groups,
+      update: function update(args) {
+        if (getKey(args) !== key) return getSlotMetrics(args);
+        return this;
+      },
+      dateIsInGroup: function dateIsInGroup(date, groupIndex) {
+        var nextGroup = groups[groupIndex + 1];
+        return localizer.inRange(date, groups[groupIndex][0], nextGroup ? nextGroup[0] : end, 'minutes');
+      },
+      nextSlot: function nextSlot(slot) {
+        var next = slots[Math.min(slots.indexOf(slot) + 1, slots.length - 1)];
+        // in the case of the last slot we won't a long enough range so manually get it
+        if (next === slot) next = localizer.add(slot, step, 'minutes');
+        return next;
+      },
+      closestSlotToPosition: function closestSlotToPosition(percent) {
+        var slot = Math.min(slots.length - 1, Math.max(0, Math.floor(percent * numSlots)));
+        return slots[slot];
+      },
+      closestSlotFromPoint: function closestSlotFromPoint(point, boundaryRect) {
+        var range = Math.abs(boundaryRect.top - boundaryRect.bottom);
+        return this.closestSlotToPosition((point.y - boundaryRect.top) / range);
+      },
+      closestSlotFromDate: function closestSlotFromDate(date) {
+        var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+        if (localizer.lt(date, start, 'minutes')) return slots[0];
+        if (localizer.gt(date, end, 'minutes')) return slots[slots.length - 1];
+        var diffMins = localizer.diff(start, date, 'minutes');
+        return slots[(diffMins - diffMins % step) / step + offset];
+      },
+      startsBeforeDay: function startsBeforeDay(date) {
+        return localizer.lt(date, start, 'day');
+      },
+      startsAfterDay: function startsAfterDay(date) {
+        return localizer.gt(date, end, 'day');
+      },
+      startsBefore: function startsBefore(date) {
+        return localizer.lt(localizer.merge(start, date), start, 'minutes');
+      },
+      startsAfter: function startsAfter(date) {
+        return localizer.gt(localizer.merge(end, date), end, 'minutes');
+      },
+      getRange: function getRange(rangeStart, rangeEnd, ignoreMin, ignoreMax) {
+        if (!ignoreMin) rangeStart = localizer.min(end, localizer.max(start, rangeStart));
+        if (!ignoreMax) rangeEnd = localizer.min(end, localizer.max(start, rangeEnd));
+        var rangeStartMin = positionFromDate(rangeStart);
+        var rangeEndMin = positionFromDate(rangeEnd);
+        var top = rangeEndMin > step * numSlots && !localizer.eq(end, rangeEnd) ? (rangeStartMin - step) / (step * numSlots) * 100 : rangeStartMin / (step * numSlots) * 100;
+        return {
+          top: top,
+          height: rangeEndMin / (step * numSlots) * 100 - top,
+          start: positionFromDate(rangeStart),
+          startDate: rangeStart,
+          end: positionFromDate(rangeEnd),
+          endDate: rangeEnd
+        };
+      },
+      getCurrentTimePosition: function getCurrentTimePosition(rangeStart) {
+        var rangeStartMin = positionFromDate(rangeStart);
+        var top = rangeStartMin / (step * numSlots) * 100;
+        return top;
+      }
+    };
+  }
+
+  var Symbol$2 = _Symbol,
+      isArguments = isArguments_1,
+      isArray$3 = isArray_1;
+
+  /** Built-in value references. */
+  var spreadableSymbol = Symbol$2 ? Symbol$2.isConcatSpreadable : undefined;
+
+  /**
+   * Checks if `value` is a flattenable `arguments` object or array.
+   *
+   * @private
+   * @param {*} value The value to check.
+   * @returns {boolean} Returns `true` if `value` is flattenable, else `false`.
+   */
+  function isFlattenable$1(value) {
+    return isArray$3(value) || isArguments(value) ||
+      !!(spreadableSymbol && value && value[spreadableSymbol]);
+  }
+
+  var _isFlattenable = isFlattenable$1;
+
+  var arrayPush$1 = _arrayPush,
+      isFlattenable = _isFlattenable;
+
+  /**
+   * The base implementation of `_.flatten` with support for restricting flattening.
+   *
+   * @private
+   * @param {Array} array The array to flatten.
+   * @param {number} depth The maximum recursion depth.
+   * @param {boolean} [predicate=isFlattenable] The function invoked per iteration.
+   * @param {boolean} [isStrict] Restrict to values that pass `predicate` checks.
+   * @param {Array} [result=[]] The initial result value.
+   * @returns {Array} Returns the new flattened array.
+   */
+  function baseFlatten$2(array, depth, predicate, isStrict, result) {
+    var index = -1,
+        length = array.length;
+
+    predicate || (predicate = isFlattenable);
+    result || (result = []);
+
+    while (++index < length) {
+      var value = array[index];
+      if (depth > 0 && predicate(value)) {
+        if (depth > 1) {
+          // Recursively flatten arrays (susceptible to call stack limits).
+          baseFlatten$2(value, depth - 1, predicate, isStrict, result);
+        } else {
+          arrayPush$1(result, value);
+        }
+      } else if (!isStrict) {
+        result[result.length] = value;
+      }
+    }
+    return result;
+  }
+
+  var _baseFlatten = baseFlatten$2;
+
+  /**
+   * Creates a base function for methods like `_.forIn` and `_.forOwn`.
+   *
+   * @private
+   * @param {boolean} [fromRight] Specify iterating from right to left.
+   * @returns {Function} Returns the new base function.
+   */
+
+  function createBaseFor$1(fromRight) {
+    return function(object, iteratee, keysFunc) {
+      var index = -1,
+          iterable = Object(object),
+          props = keysFunc(object),
+          length = props.length;
+
+      while (length--) {
+        var key = props[fromRight ? length : ++index];
+        if (iteratee(iterable[key], key, iterable) === false) {
+          break;
+        }
+      }
+      return object;
+    };
+  }
+
+  var _createBaseFor = createBaseFor$1;
+
+  var createBaseFor = _createBaseFor;
+
+  /**
+   * The base implementation of `baseForOwn` which iterates over `object`
+   * properties returned by `keysFunc` and invokes `iteratee` for each property.
+   * Iteratee functions may exit iteration early by explicitly returning `false`.
+   *
+   * @private
+   * @param {Object} object The object to iterate over.
+   * @param {Function} iteratee The function invoked per iteration.
+   * @param {Function} keysFunc The function to get the keys of `object`.
+   * @returns {Object} Returns `object`.
+   */
+  var baseFor$1 = createBaseFor();
+
+  var _baseFor = baseFor$1;
+
+  var baseFor = _baseFor,
+      keys$3 = keys_1;
+
+  /**
+   * The base implementation of `_.forOwn` without support for iteratee shorthands.
+   *
+   * @private
+   * @param {Object} object The object to iterate over.
+   * @param {Function} iteratee The function invoked per iteration.
+   * @returns {Object} Returns `object`.
+   */
+  function baseForOwn$3(object, iteratee) {
+    return object && baseFor(object, iteratee, keys$3);
+  }
+
+  var _baseForOwn = baseForOwn$3;
+
+  var isArrayLike$2 = isArrayLike_1;
+
+  /**
+   * Creates a `baseEach` or `baseEachRight` function.
+   *
+   * @private
+   * @param {Function} eachFunc The function to iterate over a collection.
+   * @param {boolean} [fromRight] Specify iterating from right to left.
+   * @returns {Function} Returns the new base function.
+   */
+  function createBaseEach$1(eachFunc, fromRight) {
+    return function(collection, iteratee) {
+      if (collection == null) {
+        return collection;
+      }
+      if (!isArrayLike$2(collection)) {
+        return eachFunc(collection, iteratee);
+      }
+      var length = collection.length,
+          index = fromRight ? length : -1,
+          iterable = Object(collection);
+
+      while ((fromRight ? index-- : ++index < length)) {
+        if (iteratee(iterable[index], index, iterable) === false) {
+          break;
+        }
+      }
+      return collection;
+    };
+  }
+
+  var _createBaseEach = createBaseEach$1;
+
+  var baseForOwn$2 = _baseForOwn,
+      createBaseEach = _createBaseEach;
+
+  /**
+   * The base implementation of `_.forEach` without support for iteratee shorthands.
+   *
+   * @private
+   * @param {Array|Object} collection The collection to iterate over.
+   * @param {Function} iteratee The function invoked per iteration.
+   * @returns {Array|Object} Returns `collection`.
+   */
+  var baseEach$1 = createBaseEach(baseForOwn$2);
+
+  var _baseEach = baseEach$1;
+
+  var baseEach = _baseEach,
+      isArrayLike$1 = isArrayLike_1;
+
+  /**
+   * The base implementation of `_.map` without support for iteratee shorthands.
+   *
+   * @private
+   * @param {Array|Object} collection The collection to iterate over.
+   * @param {Function} iteratee The function invoked per iteration.
+   * @returns {Array} Returns the new mapped array.
+   */
+  function baseMap$1(collection, iteratee) {
+    var index = -1,
+        result = isArrayLike$1(collection) ? Array(collection.length) : [];
+
+    baseEach(collection, function(value, key, collection) {
+      result[++index] = iteratee(value, key, collection);
+    });
+    return result;
+  }
+
+  var _baseMap = baseMap$1;
+
+  /**
+   * The base implementation of `_.sortBy` which uses `comparer` to define the
+   * sort order of `array` and replaces criteria objects with their corresponding
+   * values.
+   *
+   * @private
+   * @param {Array} array The array to sort.
+   * @param {Function} comparer The function to define sort order.
+   * @returns {Array} Returns `array`.
+   */
+
+  function baseSortBy$1(array, comparer) {
+    var length = array.length;
+
+    array.sort(comparer);
+    while (length--) {
+      array[length] = array[length].value;
+    }
+    return array;
+  }
+
+  var _baseSortBy = baseSortBy$1;
+
+  var isSymbol = isSymbol_1;
+
+  /**
+   * Compares values to sort them in ascending order.
+   *
+   * @private
+   * @param {*} value The value to compare.
+   * @param {*} other The other value to compare.
+   * @returns {number} Returns the sort order indicator for `value`.
+   */
+  function compareAscending$1(value, other) {
+    if (value !== other) {
+      var valIsDefined = value !== undefined,
+          valIsNull = value === null,
+          valIsReflexive = value === value,
+          valIsSymbol = isSymbol(value);
+
+      var othIsDefined = other !== undefined,
+          othIsNull = other === null,
+          othIsReflexive = other === other,
+          othIsSymbol = isSymbol(other);
+
+      if ((!othIsNull && !othIsSymbol && !valIsSymbol && value > other) ||
+          (valIsSymbol && othIsDefined && othIsReflexive && !othIsNull && !othIsSymbol) ||
+          (valIsNull && othIsDefined && othIsReflexive) ||
+          (!valIsDefined && othIsReflexive) ||
+          !valIsReflexive) {
+        return 1;
+      }
+      if ((!valIsNull && !valIsSymbol && !othIsSymbol && value < other) ||
+          (othIsSymbol && valIsDefined && valIsReflexive && !valIsNull && !valIsSymbol) ||
+          (othIsNull && valIsDefined && valIsReflexive) ||
+          (!othIsDefined && valIsReflexive) ||
+          !othIsReflexive) {
+        return -1;
+      }
+    }
+    return 0;
+  }
+
+  var _compareAscending = compareAscending$1;
+
+  var compareAscending = _compareAscending;
+
+  /**
+   * Used by `_.orderBy` to compare multiple properties of a value to another
+   * and stable sort them.
+   *
+   * If `orders` is unspecified, all values are sorted in ascending order. Otherwise,
+   * specify an order of "desc" for descending or "asc" for ascending sort order
+   * of corresponding values.
+   *
+   * @private
+   * @param {Object} object The object to compare.
+   * @param {Object} other The other object to compare.
+   * @param {boolean[]|string[]} orders The order to sort by for each property.
+   * @returns {number} Returns the sort order indicator for `object`.
+   */
+  function compareMultiple$1(object, other, orders) {
+    var index = -1,
+        objCriteria = object.criteria,
+        othCriteria = other.criteria,
+        length = objCriteria.length,
+        ordersLength = orders.length;
+
+    while (++index < length) {
+      var result = compareAscending(objCriteria[index], othCriteria[index]);
+      if (result) {
+        if (index >= ordersLength) {
+          return result;
+        }
+        var order = orders[index];
+        return result * (order == 'desc' ? -1 : 1);
+      }
+    }
+    // Fixes an `Array#sort` bug in the JS engine embedded in Adobe applications
+    // that causes it, under certain circumstances, to provide the same value for
+    // `object` and `other`. See https://github.com/jashkenas/underscore/pull/1247
+    // for more details.
+    //
+    // This also ensures a stable sort in V8 and other engines.
+    // See https://bugs.chromium.org/p/v8/issues/detail?id=90 for more details.
+    return object.index - other.index;
+  }
+
+  var _compareMultiple = compareMultiple$1;
+
+  var arrayMap$1 = _arrayMap,
+      baseGet$1 = _baseGet,
+      baseIteratee$2 = _baseIteratee,
+      baseMap = _baseMap,
+      baseSortBy = _baseSortBy,
+      baseUnary$2 = _baseUnary,
+      compareMultiple = _compareMultiple,
+      identity$2 = identity_1,
+      isArray$2 = isArray_1;
+
+  /**
+   * The base implementation of `_.orderBy` without param guards.
+   *
+   * @private
+   * @param {Array|Object} collection The collection to iterate over.
+   * @param {Function[]|Object[]|string[]} iteratees The iteratees to sort by.
+   * @param {string[]} orders The sort orders of `iteratees`.
+   * @returns {Array} Returns the new sorted array.
+   */
+  function baseOrderBy$1(collection, iteratees, orders) {
+    if (iteratees.length) {
+      iteratees = arrayMap$1(iteratees, function(iteratee) {
+        if (isArray$2(iteratee)) {
+          return function(value) {
+            return baseGet$1(value, iteratee.length === 1 ? iteratee[0] : iteratee);
+          }
+        }
+        return iteratee;
+      });
+    } else {
+      iteratees = [identity$2];
+    }
+
+    var index = -1;
+    iteratees = arrayMap$1(iteratees, baseUnary$2(baseIteratee$2));
+
+    var result = baseMap(collection, function(value, key, collection) {
+      var criteria = arrayMap$1(iteratees, function(iteratee) {
+        return iteratee(value);
+      });
+      return { 'criteria': criteria, 'index': ++index, 'value': value };
+    });
+
+    return baseSortBy(result, function(object, other) {
+      return compareMultiple(object, other, orders);
+    });
+  }
+
+  var _baseOrderBy = baseOrderBy$1;
+
+  /**
+   * A faster alternative to `Function#apply`, this function invokes `func`
+   * with the `this` binding of `thisArg` and the arguments of `args`.
+   *
+   * @private
+   * @param {Function} func The function to invoke.
+   * @param {*} thisArg The `this` binding of `func`.
+   * @param {Array} args The arguments to invoke `func` with.
+   * @returns {*} Returns the result of `func`.
+   */
+
+  function apply$1(func, thisArg, args) {
+    switch (args.length) {
+      case 0: return func.call(thisArg);
+      case 1: return func.call(thisArg, args[0]);
+      case 2: return func.call(thisArg, args[0], args[1]);
+      case 3: return func.call(thisArg, args[0], args[1], args[2]);
+    }
+    return func.apply(thisArg, args);
+  }
+
+  var _apply = apply$1;
+
+  var apply = _apply;
+
+  /* Built-in method references for those with the same name as other `lodash` methods. */
+  var nativeMax = Math.max;
+
+  /**
+   * A specialized version of `baseRest` which transforms the rest array.
+   *
+   * @private
+   * @param {Function} func The function to apply a rest parameter to.
+   * @param {number} [start=func.length-1] The start position of the rest parameter.
+   * @param {Function} transform The rest array transform.
+   * @returns {Function} Returns the new function.
+   */
+  function overRest$2(func, start, transform) {
+    start = nativeMax(start === undefined ? (func.length - 1) : start, 0);
+    return function() {
+      var args = arguments,
+          index = -1,
+          length = nativeMax(args.length - start, 0),
+          array = Array(length);
+
+      while (++index < length) {
+        array[index] = args[start + index];
+      }
+      index = -1;
+      var otherArgs = Array(start + 1);
+      while (++index < start) {
+        otherArgs[index] = args[index];
+      }
+      otherArgs[start] = transform(array);
+      return apply(func, this, otherArgs);
+    };
+  }
+
+  var _overRest = overRest$2;
+
+  /**
+   * Creates a function that returns `value`.
+   *
+   * @static
+   * @memberOf _
+   * @since 2.4.0
+   * @category Util
+   * @param {*} value The value to return from the new function.
+   * @returns {Function} Returns the new constant function.
+   * @example
+   *
+   * var objects = _.times(2, _.constant({ 'a': 1 }));
+   *
+   * console.log(objects);
+   * // => [{ 'a': 1 }, { 'a': 1 }]
+   *
+   * console.log(objects[0] === objects[1]);
+   * // => true
+   */
+
+  function constant$1(value) {
+    return function() {
+      return value;
+    };
+  }
+
+  var constant_1 = constant$1;
+
+  var getNative = _getNative;
+
+  var defineProperty$3 = (function() {
+    try {
+      var func = getNative(Object, 'defineProperty');
+      func({}, '', {});
+      return func;
+    } catch (e) {}
+  }());
+
+  var _defineProperty = defineProperty$3;
+
+  var constant = constant_1,
+      defineProperty$2 = _defineProperty,
+      identity$1 = identity_1;
+
+  /**
+   * The base implementation of `setToString` without support for hot loop shorting.
+   *
+   * @private
+   * @param {Function} func The function to modify.
+   * @param {Function} string The `toString` result.
+   * @returns {Function} Returns `func`.
+   */
+  var baseSetToString$1 = !defineProperty$2 ? identity$1 : function(func, string) {
+    return defineProperty$2(func, 'toString', {
+      'configurable': true,
+      'enumerable': false,
+      'value': constant(string),
+      'writable': true
+    });
+  };
+
+  var _baseSetToString = baseSetToString$1;
+
+  /** Used to detect hot functions by number of calls within a span of milliseconds. */
+
+  var HOT_COUNT = 800,
+      HOT_SPAN = 16;
+
+  /* Built-in method references for those with the same name as other `lodash` methods. */
+  var nativeNow = Date.now;
+
+  /**
+   * Creates a function that'll short out and invoke `identity` instead
+   * of `func` when it's called `HOT_COUNT` or more times in `HOT_SPAN`
+   * milliseconds.
+   *
+   * @private
+   * @param {Function} func The function to restrict.
+   * @returns {Function} Returns the new shortable function.
+   */
+  function shortOut$1(func) {
+    var count = 0,
+        lastCalled = 0;
+
+    return function() {
+      var stamp = nativeNow(),
+          remaining = HOT_SPAN - (stamp - lastCalled);
+
+      lastCalled = stamp;
+      if (remaining > 0) {
+        if (++count >= HOT_COUNT) {
+          return arguments[0];
+        }
+      } else {
+        count = 0;
+      }
+      return func.apply(undefined, arguments);
+    };
+  }
+
+  var _shortOut = shortOut$1;
+
+  var baseSetToString = _baseSetToString,
+      shortOut = _shortOut;
+
+  /**
+   * Sets the `toString` method of `func` to return `string`.
+   *
+   * @private
+   * @param {Function} func The function to modify.
+   * @param {Function} string The `toString` result.
+   * @returns {Function} Returns `func`.
+   */
+  var setToString$2 = shortOut(baseSetToString);
+
+  var _setToString = setToString$2;
+
+  var identity = identity_1,
+      overRest$1 = _overRest,
+      setToString$1 = _setToString;
+
+  /**
+   * The base implementation of `_.rest` which doesn't validate or coerce arguments.
+   *
+   * @private
+   * @param {Function} func The function to apply a rest parameter to.
+   * @param {number} [start=func.length-1] The start position of the rest parameter.
+   * @returns {Function} Returns the new function.
+   */
+  function baseRest$2(func, start) {
+    return setToString$1(overRest$1(func, start, identity), func + '');
+  }
+
+  var _baseRest = baseRest$2;
+
+  var baseFlatten$1 = _baseFlatten,
+      baseOrderBy = _baseOrderBy,
+      baseRest$1 = _baseRest,
+      isIterateeCall$1 = _isIterateeCall;
+
+  /**
+   * Creates an array of elements, sorted in ascending order by the results of
+   * running each element in a collection thru each iteratee. This method
+   * performs a stable sort, that is, it preserves the original sort order of
+   * equal elements. The iteratees are invoked with one argument: (value).
+   *
+   * @static
+   * @memberOf _
+   * @since 0.1.0
+   * @category Collection
+   * @param {Array|Object} collection The collection to iterate over.
+   * @param {...(Function|Function[])} [iteratees=[_.identity]]
+   *  The iteratees to sort by.
+   * @returns {Array} Returns the new sorted array.
+   * @example
+   *
+   * var users = [
+   *   { 'user': 'fred',   'age': 48 },
+   *   { 'user': 'barney', 'age': 36 },
+   *   { 'user': 'fred',   'age': 30 },
+   *   { 'user': 'barney', 'age': 34 }
+   * ];
+   *
+   * _.sortBy(users, [function(o) { return o.user; }]);
+   * // => objects for [['barney', 36], ['barney', 34], ['fred', 48], ['fred', 30]]
+   *
+   * _.sortBy(users, ['user', 'age']);
+   * // => objects for [['barney', 34], ['barney', 36], ['fred', 30], ['fred', 48]]
+   */
+  var sortBy = baseRest$1(function(collection, iteratees) {
+    if (collection == null) {
+      return [];
+    }
+    var length = iteratees.length;
+    if (length > 1 && isIterateeCall$1(collection, iteratees[0], iteratees[1])) {
+      iteratees = [];
+    } else if (length > 2 && isIterateeCall$1(iteratees[0], iteratees[1], iteratees[2])) {
+      iteratees = [iteratees[0]];
+    }
+    return baseOrderBy(collection, baseFlatten$1(iteratees, 1), []);
+  });
+
+  var sortBy_1 = sortBy;
+
+  var Event$1 = /*#__PURE__*/function () {
+    function Event(data, _ref) {
+      var accessors = _ref.accessors,
+        slotMetrics = _ref.slotMetrics;
+      _classCallCheck(this, Event);
+      var _slotMetrics$getRange = slotMetrics.getRange(accessors.start(data), accessors.end(data)),
+        start = _slotMetrics$getRange.start,
+        startDate = _slotMetrics$getRange.startDate,
+        end = _slotMetrics$getRange.end,
+        endDate = _slotMetrics$getRange.endDate,
+        top = _slotMetrics$getRange.top,
+        height = _slotMetrics$getRange.height;
+      this.start = start;
+      this.end = end;
+      this.startMs = +startDate;
+      this.endMs = +endDate;
+      this.top = top;
+      this.height = height;
+      this.data = data;
+    }
+
+    /**
+     * The event's width without any overlap.
+     */
+    _createClass(Event, [{
+      key: "_width",
+      get: function get() {
+        // The container event's width is determined by the maximum number of
+        // events in any of its rows.
+        if (this.rows) {
+          var columns = this.rows.reduce(function (max, row) {
+            return Math.max(max, row.leaves.length + 1);
+          },
+          // add itself
+          0) + 1; // add the container
+
+          return 100 / columns;
+        }
+
+        // The row event's width is the space left by the container, divided
+        // among itself and its leaves.
+        if (this.leaves) {
+          var availableWidth = 100 - this.container._width;
+          return availableWidth / (this.leaves.length + 1);
+        }
+
+        // The leaf event's width is determined by its row's width
+        return this.row._width;
+      }
+
+      /**
+       * The event's calculated width, possibly with extra width added for
+       * overlapping effect.
+       */
+    }, {
+      key: "width",
+      get: function get() {
+        var noOverlap = this._width;
+        var overlap = Math.min(100, this._width * 1.7);
+
+        // Containers can always grow.
+        if (this.rows) {
+          return overlap;
+        }
+
+        // Rows can grow if they have leaves.
+        if (this.leaves) {
+          return this.leaves.length > 0 ? overlap : noOverlap;
+        }
+
+        // Leaves can grow unless they're the last item in a row.
+        var leaves = this.row.leaves;
+        var index = leaves.indexOf(this);
+        return index === leaves.length - 1 ? noOverlap : overlap;
+      }
+    }, {
+      key: "xOffset",
+      get: function get() {
+        // Containers have no offset.
+        if (this.rows) return 0;
+
+        // Rows always start where their container ends.
+        if (this.leaves) return this.container._width;
+
+        // Leaves are spread out evenly on the space left by its row.
+        var _this$row = this.row,
+          leaves = _this$row.leaves,
+          xOffset = _this$row.xOffset,
+          _width = _this$row._width;
+        var index = leaves.indexOf(this) + 1;
+        return xOffset + index * _width;
+      }
+    }]);
+    return Event;
+  }();
+  /**
+   * Return true if event a and b is considered to be on the same row.
+   */
+  function onSameRow(a, b, minimumStartDifference) {
+    return (
+      // Occupies the same start slot.
+      Math.abs(b.start - a.start) < minimumStartDifference ||
+      // A's start slot overlaps with b's end slot.
+      b.start > a.start && b.start < a.end
+    );
+  }
+  function sortByRender(events) {
+    var sortedByTime = sortBy_1(events, ['startMs', function (e) {
+      return -e.endMs;
+    }]);
+    var sorted = [];
+    while (sortedByTime.length > 0) {
+      var event = sortedByTime.shift();
+      sorted.push(event);
+      for (var i = 0; i < sortedByTime.length; i++) {
+        var test = sortedByTime[i];
+
+        // Still inside this event, look for next.
+        if (event.endMs > test.startMs) continue;
+
+        // We've found the first event of the next event group.
+        // If that event is not right next to our current event, we have to
+        // move it here.
+        if (i > 0) {
+          var _event = sortedByTime.splice(i, 1)[0];
+          sorted.push(_event);
+        }
+
+        // We've already found the next event group, so stop looking.
+        break;
+      }
+    }
+    return sorted;
+  }
+  function getStyledEvents$1(_ref2) {
+    var events = _ref2.events,
+      minimumStartDifference = _ref2.minimumStartDifference,
+      slotMetrics = _ref2.slotMetrics,
+      accessors = _ref2.accessors;
+    // Create proxy events and order them so that we don't have
+    // to fiddle with z-indexes.
+    var proxies = events.map(function (event) {
+      return new Event$1(event, {
+        slotMetrics: slotMetrics,
+        accessors: accessors
+      });
+    });
+    var eventsInRenderOrder = sortByRender(proxies);
+
+    // Group overlapping events, while keeping order.
+    // Every event is always one of: container, row or leaf.
+    // Containers can contain rows, and rows can contain leaves.
+    var containerEvents = [];
+    var _loop = function _loop() {
+      var event = eventsInRenderOrder[i];
+
+      // Check if this event can go into a container event.
+      var container = containerEvents.find(function (c) {
+        return c.end > event.start || Math.abs(event.start - c.start) < minimumStartDifference;
+      });
+
+      // Couldn't find a container — that means this event is a container.
+      if (!container) {
+        event.rows = [];
+        containerEvents.push(event);
+        return 1; // continue
+      }
+
+      // Found a container for the event.
+      event.container = container;
+
+      // Check if the event can be placed in an existing row.
+      // Start looking from behind.
+      var row = null;
+      for (var j = container.rows.length - 1; !row && j >= 0; j--) {
+        if (onSameRow(container.rows[j], event, minimumStartDifference)) {
+          row = container.rows[j];
+        }
+      }
+      if (row) {
+        // Found a row, so add it.
+        row.leaves.push(event);
+        event.row = row;
+      } else {
+        // Couldn't find a row – that means this event is a row.
+        event.leaves = [];
+        container.rows.push(event);
+      }
+    };
+    for (var i = 0; i < eventsInRenderOrder.length; i++) {
+      if (_loop()) continue;
+    }
+
+    // Return the original events, along with their styles.
+    return eventsInRenderOrder.map(function (event) {
+      return {
+        event: event.data,
+        style: {
+          top: event.top,
+          height: event.height,
+          width: event.width,
+          xOffset: Math.max(0, event.xOffset)
+        }
+      };
+    });
+  }
+
+  function getMaxIdxDFS(node, maxIdx, visited) {
+    for (var i = 0; i < node.friends.length; ++i) {
+      if (visited.indexOf(node.friends[i]) > -1) continue;
+      maxIdx = maxIdx > node.friends[i].idx ? maxIdx : node.friends[i].idx;
+      // TODO : trace it by not object but kinda index or something for performance
+      visited.push(node.friends[i]);
+      var newIdx = getMaxIdxDFS(node.friends[i], maxIdx, visited);
+      maxIdx = maxIdx > newIdx ? maxIdx : newIdx;
+    }
+    return maxIdx;
+  }
+  function noOverlap (_ref) {
+    var events = _ref.events,
+      minimumStartDifference = _ref.minimumStartDifference,
+      slotMetrics = _ref.slotMetrics,
+      accessors = _ref.accessors;
+    var styledEvents = getStyledEvents$1({
+      events: events,
+      minimumStartDifference: minimumStartDifference,
+      slotMetrics: slotMetrics,
+      accessors: accessors
+    });
+    styledEvents.sort(function (a, b) {
+      a = a.style;
+      b = b.style;
+      if (a.top !== b.top) return a.top > b.top ? 1 : -1;else return a.top + a.height < b.top + b.height ? 1 : -1;
+    });
+    for (var i = 0; i < styledEvents.length; ++i) {
+      styledEvents[i].friends = [];
+      delete styledEvents[i].style.left;
+      delete styledEvents[i].style.left;
+      delete styledEvents[i].idx;
+      delete styledEvents[i].size;
+    }
+    for (var _i2 = 0; _i2 < styledEvents.length - 1; ++_i2) {
+      var se1 = styledEvents[_i2];
+      var y1 = se1.style.top;
+      var y2 = se1.style.top + se1.style.height;
+      for (var j = _i2 + 1; j < styledEvents.length; ++j) {
+        var se2 = styledEvents[j];
+        var y3 = se2.style.top;
+        var y4 = se2.style.top + se2.style.height;
+        if (y3 >= y1 && y4 <= y2 || y4 > y1 && y4 <= y2 || y3 >= y1 && y3 < y2) {
+          // TODO : hashmap would be effective for performance
+          se1.friends.push(se2);
+          se2.friends.push(se1);
+        }
+      }
+    }
+    for (var _i4 = 0; _i4 < styledEvents.length; ++_i4) {
+      var se = styledEvents[_i4];
+      var bitmap = [];
+      for (var _j2 = 0; _j2 < 100; ++_j2) bitmap.push(1); // 1 means available
+
+      for (var _j4 = 0; _j4 < se.friends.length; ++_j4) if (se.friends[_j4].idx !== undefined) bitmap[se.friends[_j4].idx] = 0; // 0 means reserved
+
+      se.idx = bitmap.indexOf(1);
+    }
+    for (var _i6 = 0; _i6 < styledEvents.length; ++_i6) {
+      var size = 0;
+      if (styledEvents[_i6].size) continue;
+      var allFriends = [];
+      var maxIdx = getMaxIdxDFS(styledEvents[_i6], 0, allFriends);
+      size = 100 / (maxIdx + 1);
+      styledEvents[_i6].size = size;
+      for (var _j6 = 0; _j6 < allFriends.length; ++_j6) allFriends[_j6].size = size;
+    }
+    for (var _i8 = 0; _i8 < styledEvents.length; ++_i8) {
+      var e = styledEvents[_i8];
+      e.style.left = e.idx * e.size;
+
+      // stretch to maximum
+      var _maxIdx = 0;
+      for (var _j8 = 0; _j8 < e.friends.length; ++_j8) {
+        var idx = e.friends[_j8].idx;
+        _maxIdx = _maxIdx > idx ? _maxIdx : idx;
+      }
+      if (_maxIdx <= e.idx) e.size = 100 - e.idx * e.size;
+
+      // padding between events
+      // for this feature, `width` is not percentage based unit anymore
+      // it will be used with calc()
+      var padding = e.idx === 0 ? 0 : 3;
+      e.style.width = "calc(".concat(e.size, "% - ").concat(padding, "px)");
+      e.style.height = "calc(".concat(e.style.height, "% - 2px)");
+      e.style.xOffset = "calc(".concat(e.style.left, "% + ").concat(padding, "px)");
+    }
+    return styledEvents;
+  }
+
+  /*eslint no-unused-vars: "off"*/
+
+  var DefaultAlgorithms = {
+    overlap: getStyledEvents$1,
+    'no-overlap': noOverlap
+  };
+  function isFunction$1(a) {
+    return !!(a && a.constructor && a.call && a.apply);
+  }
+
+  //
+  function getStyledEvents(_ref) {
+    _ref.events;
+      _ref.minimumStartDifference;
+      _ref.slotMetrics;
+      _ref.accessors;
+      var dayLayoutAlgorithm = _ref.dayLayoutAlgorithm;
+    var algorithm = dayLayoutAlgorithm;
+    if (dayLayoutAlgorithm in DefaultAlgorithms) algorithm = DefaultAlgorithms[dayLayoutAlgorithm];
+    if (!isFunction$1(algorithm)) {
+      // invalid algorithm
+      return [];
+    }
+    return algorithm.apply(this, arguments);
+  }
+
+  var TimeSlotGroup = /*#__PURE__*/function (_Component) {
+    _inherits(TimeSlotGroup, _Component);
+    var _super = _createSuper(TimeSlotGroup);
+    function TimeSlotGroup() {
+      _classCallCheck(this, TimeSlotGroup);
+      return _super.apply(this, arguments);
+    }
+    _createClass(TimeSlotGroup, [{
+      key: "render",
+      value: function render() {
+        var _this$props = this.props,
+          renderSlot = _this$props.renderSlot,
+          resource = _this$props.resource,
+          group = _this$props.group,
+          getters = _this$props.getters,
+          _this$props$component = _this$props.components,
+          _this$props$component2 = _this$props$component === void 0 ? {} : _this$props$component,
+          _this$props$component3 = _this$props$component2.timeSlotWrapper,
+          Wrapper = _this$props$component3 === void 0 ? NoopWrapper : _this$props$component3;
+        var groupProps = getters ? getters.slotGroupProp(group) : {};
+        return /*#__PURE__*/React.createElement("div", Object.assign({
+          className: "rbc-timeslot-group"
+        }, groupProps), group.map(function (value, idx) {
+          var slotProps = getters ? getters.slotProp(value, resource) : {};
+          return /*#__PURE__*/React.createElement(Wrapper, {
+            key: idx,
+            value: value,
+            resource: resource
+          }, /*#__PURE__*/React.createElement("div", Object.assign({}, slotProps, {
+            className: clsx('rbc-time-slot', slotProps.className)
+          }), renderSlot && renderSlot(value, idx)));
+        }));
+      }
+    }]);
+    return TimeSlotGroup;
+  }(reactExports.Component);
+  TimeSlotGroup.propTypes = "development" !== "production" ? {
+    renderSlot: propTypesExports.func,
+    group: propTypesExports.array.isRequired,
+    resource: propTypesExports.any,
+    components: propTypesExports.object,
+    getters: propTypesExports.object
+  } : {};
+
+  function stringifyPercent(v) {
+    return typeof v === 'string' ? v : v + '%';
+  }
+
+  /* eslint-disable react/prop-types */
+  function TimeGridEvent(props) {
+    var style = props.style,
+      className = props.className,
+      event = props.event,
+      accessors = props.accessors,
+      rtl = props.rtl,
+      selected = props.selected,
+      label = props.label,
+      continuesPrior = props.continuesPrior,
+      continuesAfter = props.continuesAfter,
+      getters = props.getters,
+      onClick = props.onClick,
+      onDoubleClick = props.onDoubleClick,
+      isBackgroundEvent = props.isBackgroundEvent,
+      onKeyPress = props.onKeyPress,
+      _props$components = props.components,
+      Event = _props$components.event,
+      EventWrapper = _props$components.eventWrapper;
+    var title = accessors.title(event);
+    var tooltip = accessors.tooltip(event);
+    var end = accessors.end(event);
+    var start = accessors.start(event);
+    var userProps = getters.eventProp(event, start, end, selected);
+    var height = style.height,
+      top = style.top,
+      width = style.width,
+      xOffset = style.xOffset;
+    var inner = [/*#__PURE__*/React.createElement("div", {
+      key: "1",
+      className: "rbc-event-label"
+    }, label), /*#__PURE__*/React.createElement("div", {
+      key: "2",
+      className: "rbc-event-content"
+    }, Event ? /*#__PURE__*/React.createElement(Event, {
+      event: event,
+      title: title
+    }) : title)];
+    var eventStyle = isBackgroundEvent ? _objectSpread2(_objectSpread2({}, userProps.style), {}, _defineProperty$1({
+      top: stringifyPercent(top),
+      height: stringifyPercent(height),
+      // Adding 10px to take events container right margin into account
+      width: "calc(".concat(width, " + 10px)")
+    }, rtl ? 'right' : 'left', stringifyPercent(Math.max(0, xOffset)))) : _objectSpread2(_objectSpread2({}, userProps.style), {}, _defineProperty$1({
+      top: stringifyPercent(top),
+      width: stringifyPercent(width),
+      height: stringifyPercent(height)
+    }, rtl ? 'right' : 'left', stringifyPercent(xOffset)));
+    return /*#__PURE__*/React.createElement(EventWrapper, Object.assign({
+      type: "time"
+    }, props), /*#__PURE__*/React.createElement("div", {
+      onClick: onClick,
+      onDoubleClick: onDoubleClick,
+      style: eventStyle,
+      onKeyPress: onKeyPress,
+      title: tooltip ? (typeof label === 'string' ? label + ': ' : '') + tooltip : undefined,
+      className: clsx(isBackgroundEvent ? 'rbc-background-event' : 'rbc-event', className, userProps.className, {
+        'rbc-selected': selected,
+        'rbc-event-continues-earlier': continuesPrior,
+        'rbc-event-continues-later': continuesAfter
+      })
+    }, inner));
+  }
+
+  var DayColumnWrapper = function DayColumnWrapper(_ref) {
+    var children = _ref.children,
+      className = _ref.className,
+      style = _ref.style,
+      innerRef = _ref.innerRef;
+    return /*#__PURE__*/React.createElement("div", {
+      className: className,
+      style: style,
+      ref: innerRef
+    }, children);
+  };
+  var DayColumnWrapper$1 = /*#__PURE__*/React.forwardRef(function (props, ref) {
+    return /*#__PURE__*/React.createElement(DayColumnWrapper, Object.assign({}, props, {
+      innerRef: ref
+    }));
+  });
+
   /**
    * This serves as a build time flag that will be true by default, but false in non-debug builds or if users replace `__SENTRY_DEBUG__` in their generated code.
    *
@@ -38629,7 +42375,7 @@
    * @param wat A value to be checked.
    * @returns A boolean representing the result.
    */
-  function isEvent$1(wat) {
+  function isEvent(wat) {
     return typeof Event !== 'undefined' && isInstanceOf(wat, Event);
   }
 
@@ -39101,7 +42847,7 @@
         stack: value.stack,
         ...getOwnProperties(value),
       };
-    } else if (isEvent$1(value)) {
+    } else if (isEvent(value)) {
       const newObj
 
    = {
@@ -49185,7 +52931,7 @@
       exception: {
         values: [
           {
-            type: isEvent$1(exception) ? exception.constructor.name : isUnhandledRejection ? 'UnhandledRejection' : 'Error',
+            type: isEvent(exception) ? exception.constructor.name : isUnhandledRejection ? 'UnhandledRejection' : 'Error',
             value: getNonErrorObjectExceptionValue(exception, { isUnhandledRejection }),
           } ,
         ],
@@ -49413,7 +53159,7 @@
       // we have a real Error object, do nothing
       return eventFromError(stackParser, exception);
     }
-    if (isPlainObject$2(exception) || isEvent$1(exception)) {
+    if (isPlainObject$2(exception) || isEvent(exception)) {
       // If it's a plain object or an instance of `Event` (the built-in JS kind, not this SDK's `Event` type), serialize
       // it manually. This will allow us to group events based on top-level keys which is much better than creating a new
       // group on any key/value change.
@@ -49488,7 +53234,7 @@
       return `Event \`ErrorEvent\` captured as ${captureType} with message \`${exception.message}\``;
     }
 
-    if (isEvent$1(exception)) {
+    if (isEvent(exception)) {
       const className = getObjectClassName(exception);
       return `Event \`${className}\` (type=${exception.type}) captured as ${captureType}`;
     }
@@ -68598,14 +72344,14 @@ ${SUCCESS}
     return callback => dbp.then(db => callback(db.transaction(storeName, 'readwrite').objectStore(storeName)));
   }
 
-  function keys$4(store) {
+  function keys$2(store) {
     return promisifyRequest(store.getAllKeys() );
   }
 
   /** Insert into the end of the store */
   function push(store, value, maxQueueSize) {
     return store(store => {
-      return keys$4(store).then(keys => {
+      return keys$2(store).then(keys => {
         if (keys.length >= maxQueueSize) {
           return;
         }
@@ -68620,7 +72366,7 @@ ${SUCCESS}
   /** Insert into the front of the store */
   function unshift(store, value, maxQueueSize) {
     return store(store => {
-      return keys$4(store).then(keys => {
+      return keys$2(store).then(keys => {
         if (keys.length >= maxQueueSize) {
           return;
         }
@@ -68635,7 +72381,7 @@ ${SUCCESS}
   /** Pop the oldest value from the store */
   function shift(store) {
     return store(store => {
-      return keys$4(store).then(keys => {
+      return keys$2(store).then(keys => {
         const firstKey = keys[0];
         if (firstKey == null) {
           return undefined;
@@ -70004,7 +73750,7 @@ ${SUCCESS}
     return TYPE_STATICS[component['$$typeof']] || REACT_STATICS;
   }
 
-  var defineProperty$3 = Object.defineProperty;
+  var defineProperty$1 = Object.defineProperty;
   var getOwnPropertyNames = Object.getOwnPropertyNames;
   var getOwnPropertySymbols = Object.getOwnPropertySymbols;
   var getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
@@ -70038,7 +73784,7 @@ ${SUCCESS}
 
           try {
             // Avoid failures from read-only properties
-            defineProperty$3(targetComponent, key, descriptor);
+            defineProperty$1(targetComponent, key, descriptor);
           } catch (e) {}
         }
       }
@@ -71865,3754 +75611,6 @@ ${SUCCESS}
     release: 'react-big-calendar'
   });
 
-  function addEventListener$1(type, handler) {
-    var target = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : document;
-    return listen(target, type, handler, {
-      passive: false
-    });
-  }
-  function isOverContainer(container, x, y) {
-    return !container || contains$1(container, document.elementFromPoint(x, y));
-  }
-  function getEventNodeFromPoint(node, _ref) {
-    var clientX = _ref.clientX,
-      clientY = _ref.clientY;
-    var target = document.elementFromPoint(clientX, clientY);
-    return closest(target, '.rbc-event', node);
-  }
-  function getShowMoreNodeFromPoint(node, _ref2) {
-    var clientX = _ref2.clientX,
-      clientY = _ref2.clientY;
-    var target = document.elementFromPoint(clientX, clientY);
-    return closest(target, '.rbc-show-more', node);
-  }
-  function isEvent(node, bounds) {
-    return !!getEventNodeFromPoint(node, bounds);
-  }
-  function isShowMore(node, bounds) {
-    return !!getShowMoreNodeFromPoint(node, bounds);
-  }
-  function getEventCoordinates(e) {
-    var target = e;
-    if (e.touches && e.touches.length) {
-      target = e.touches[0];
-    }
-    return {
-      clientX: target.clientX,
-      clientY: target.clientY,
-      pageX: target.pageX,
-      pageY: target.pageY
-    };
-  }
-  var clickTolerance = 5;
-  var clickInterval = 250;
-  var Selection = /*#__PURE__*/function () {
-    function Selection(node) {
-      var _ref3 = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {},
-        _ref3$global = _ref3.global,
-        global = _ref3$global === void 0 ? false : _ref3$global,
-        _ref3$longPressThresh = _ref3.longPressThreshold,
-        longPressThreshold = _ref3$longPressThresh === void 0 ? 250 : _ref3$longPressThresh,
-        _ref3$validContainers = _ref3.validContainers,
-        validContainers = _ref3$validContainers === void 0 ? [] : _ref3$validContainers;
-      _classCallCheck(this, Selection);
-      this.isDetached = false;
-      this.container = node;
-      this.globalMouse = !node || global;
-      this.longPressThreshold = longPressThreshold;
-      this.validContainers = validContainers;
-      this._listeners = Object.create(null);
-      this._handleInitialEvent = this._handleInitialEvent.bind(this);
-      this._handleMoveEvent = this._handleMoveEvent.bind(this);
-      this._handleTerminatingEvent = this._handleTerminatingEvent.bind(this);
-      this._keyListener = this._keyListener.bind(this);
-      this._dropFromOutsideListener = this._dropFromOutsideListener.bind(this);
-      this._dragOverFromOutsideListener = this._dragOverFromOutsideListener.bind(this);
-
-      // Fixes an iOS 10 bug where scrolling could not be prevented on the window.
-      // https://github.com/metafizzy/flickity/issues/457#issuecomment-254501356
-      this._removeTouchMoveWindowListener = addEventListener$1('touchmove', function () {}, window);
-      this._removeKeyDownListener = addEventListener$1('keydown', this._keyListener);
-      this._removeKeyUpListener = addEventListener$1('keyup', this._keyListener);
-      this._removeDropFromOutsideListener = addEventListener$1('drop', this._dropFromOutsideListener);
-      this._removeDragOverFromOutsideListener = addEventListener$1('dragover', this._dragOverFromOutsideListener);
-      this._addInitialEventListener();
-    }
-    _createClass(Selection, [{
-      key: "on",
-      value: function on(type, handler) {
-        var handlers = this._listeners[type] || (this._listeners[type] = []);
-        handlers.push(handler);
-        return {
-          remove: function remove() {
-            var idx = handlers.indexOf(handler);
-            if (idx !== -1) handlers.splice(idx, 1);
-          }
-        };
-      }
-    }, {
-      key: "emit",
-      value: function emit(type) {
-        for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-          args[_key - 1] = arguments[_key];
-        }
-        var result;
-        var handlers = this._listeners[type] || [];
-        handlers.forEach(function (fn) {
-          if (result === undefined) result = fn.apply(void 0, args);
-        });
-        return result;
-      }
-    }, {
-      key: "teardown",
-      value: function teardown() {
-        this.isDetached = true;
-        this._listeners = Object.create(null);
-        this._removeTouchMoveWindowListener && this._removeTouchMoveWindowListener();
-        this._removeInitialEventListener && this._removeInitialEventListener();
-        this._removeEndListener && this._removeEndListener();
-        this._onEscListener && this._onEscListener();
-        this._removeMoveListener && this._removeMoveListener();
-        this._removeKeyUpListener && this._removeKeyUpListener();
-        this._removeKeyDownListener && this._removeKeyDownListener();
-        this._removeDropFromOutsideListener && this._removeDropFromOutsideListener();
-        this._removeDragOverFromOutsideListener && this._removeDragOverFromOutsideListener();
-      }
-    }, {
-      key: "isSelected",
-      value: function isSelected(node) {
-        var box = this._selectRect;
-        if (!box || !this.selecting) return false;
-        return objectsCollide(box, getBoundsForNode(node));
-      }
-    }, {
-      key: "filter",
-      value: function filter(items) {
-        var box = this._selectRect;
-
-        //not selecting
-        if (!box || !this.selecting) return [];
-        return items.filter(this.isSelected, this);
-      }
-
-      // Adds a listener that will call the handler only after the user has pressed on the screen
-      // without moving their finger for 250ms.
-    }, {
-      key: "_addLongPressListener",
-      value: function _addLongPressListener(handler, initialEvent) {
-        var _this = this;
-        var timer = null;
-        var removeTouchMoveListener = null;
-        var removeTouchEndListener = null;
-        var handleTouchStart = function handleTouchStart(initialEvent) {
-          timer = setTimeout(function () {
-            cleanup();
-            handler(initialEvent);
-          }, _this.longPressThreshold);
-          removeTouchMoveListener = addEventListener$1('touchmove', function () {
-            return cleanup();
-          });
-          removeTouchEndListener = addEventListener$1('touchend', function () {
-            return cleanup();
-          });
-        };
-        var removeTouchStartListener = addEventListener$1('touchstart', handleTouchStart);
-        var cleanup = function cleanup() {
-          if (timer) {
-            clearTimeout(timer);
-          }
-          if (removeTouchMoveListener) {
-            removeTouchMoveListener();
-          }
-          if (removeTouchEndListener) {
-            removeTouchEndListener();
-          }
-          timer = null;
-          removeTouchMoveListener = null;
-          removeTouchEndListener = null;
-        };
-        if (initialEvent) {
-          handleTouchStart(initialEvent);
-        }
-        return function () {
-          cleanup();
-          removeTouchStartListener();
-        };
-      }
-
-      // Listen for mousedown and touchstart events. When one is received, disable the other and setup
-      // future event handling based on the type of event.
-    }, {
-      key: "_addInitialEventListener",
-      value: function _addInitialEventListener() {
-        var _this2 = this;
-        var removeMouseDownListener = addEventListener$1('mousedown', function (e) {
-          _this2._removeInitialEventListener();
-          _this2._handleInitialEvent(e);
-          _this2._removeInitialEventListener = addEventListener$1('mousedown', _this2._handleInitialEvent);
-        });
-        var removeTouchStartListener = addEventListener$1('touchstart', function (e) {
-          _this2._removeInitialEventListener();
-          _this2._removeInitialEventListener = _this2._addLongPressListener(_this2._handleInitialEvent, e);
-        });
-        this._removeInitialEventListener = function () {
-          removeMouseDownListener();
-          removeTouchStartListener();
-        };
-      }
-    }, {
-      key: "_dropFromOutsideListener",
-      value: function _dropFromOutsideListener(e) {
-        var _getEventCoordinates = getEventCoordinates(e),
-          pageX = _getEventCoordinates.pageX,
-          pageY = _getEventCoordinates.pageY,
-          clientX = _getEventCoordinates.clientX,
-          clientY = _getEventCoordinates.clientY;
-        this.emit('dropFromOutside', {
-          x: pageX,
-          y: pageY,
-          clientX: clientX,
-          clientY: clientY
-        });
-        e.preventDefault();
-      }
-    }, {
-      key: "_dragOverFromOutsideListener",
-      value: function _dragOverFromOutsideListener(e) {
-        var _getEventCoordinates2 = getEventCoordinates(e),
-          pageX = _getEventCoordinates2.pageX,
-          pageY = _getEventCoordinates2.pageY,
-          clientX = _getEventCoordinates2.clientX,
-          clientY = _getEventCoordinates2.clientY;
-        this.emit('dragOverFromOutside', {
-          x: pageX,
-          y: pageY,
-          clientX: clientX,
-          clientY: clientY
-        });
-        e.preventDefault();
-      }
-    }, {
-      key: "_handleInitialEvent",
-      value: function _handleInitialEvent(e) {
-        if (this.isDetached) {
-          return;
-        }
-        var _getEventCoordinates3 = getEventCoordinates(e),
-          clientX = _getEventCoordinates3.clientX,
-          clientY = _getEventCoordinates3.clientY,
-          pageX = _getEventCoordinates3.pageX,
-          pageY = _getEventCoordinates3.pageY;
-        var node = this.container(),
-          collides,
-          offsetData;
-
-        // Right clicks
-        if (e.which === 3 || e.button === 2 || !isOverContainer(node, clientX, clientY)) return;
-        if (!this.globalMouse && node && !contains$1(node, e.target)) {
-          var _normalizeDistance = normalizeDistance(0),
-            top = _normalizeDistance.top,
-            left = _normalizeDistance.left,
-            bottom = _normalizeDistance.bottom,
-            right = _normalizeDistance.right;
-          offsetData = getBoundsForNode(node);
-          collides = objectsCollide({
-            top: offsetData.top - top,
-            left: offsetData.left - left,
-            bottom: offsetData.bottom + bottom,
-            right: offsetData.right + right
-          }, {
-            top: pageY,
-            left: pageX
-          });
-          if (!collides) return;
-        }
-        var result = this.emit('beforeSelect', this._initialEventData = {
-          isTouch: /^touch/.test(e.type),
-          x: pageX,
-          y: pageY,
-          clientX: clientX,
-          clientY: clientY
-        });
-        if (result === false) return;
-        switch (e.type) {
-          case 'mousedown':
-            this._removeEndListener = addEventListener$1('mouseup', this._handleTerminatingEvent);
-            this._onEscListener = addEventListener$1('keydown', this._handleTerminatingEvent);
-            this._removeMoveListener = addEventListener$1('mousemove', this._handleMoveEvent);
-            break;
-          case 'touchstart':
-            this._handleMoveEvent(e);
-            this._removeEndListener = addEventListener$1('touchend', this._handleTerminatingEvent);
-            this._removeMoveListener = addEventListener$1('touchmove', this._handleMoveEvent);
-            break;
-        }
-      }
-
-      // Check whether provided event target element
-      // - is contained within a valid container
-    }, {
-      key: "_isWithinValidContainer",
-      value: function _isWithinValidContainer(e) {
-        var eventTarget = e.target;
-        var containers = this.validContainers;
-        if (!containers || !containers.length || !eventTarget) {
-          return true;
-        }
-        return containers.some(function (target) {
-          return !!eventTarget.closest(target);
-        });
-      }
-    }, {
-      key: "_handleTerminatingEvent",
-      value: function _handleTerminatingEvent(e) {
-        var _getEventCoordinates4 = getEventCoordinates(e),
-          pageX = _getEventCoordinates4.pageX,
-          pageY = _getEventCoordinates4.pageY;
-        this.selecting = false;
-        this._removeEndListener && this._removeEndListener();
-        this._removeMoveListener && this._removeMoveListener();
-        if (!this._initialEventData) return;
-        var inRoot = !this.container || contains$1(this.container(), e.target);
-        var isWithinValidContainer = this._isWithinValidContainer(e);
-        var bounds = this._selectRect;
-        var click = this.isClick(pageX, pageY);
-        this._initialEventData = null;
-        if (e.key === 'Escape' || !isWithinValidContainer) return this.emit('reset');
-        if (click && inRoot) return this._handleClickEvent(e);
-
-        // User drag-clicked in the Selectable area
-        if (!click) return this.emit('select', bounds);
-        return this.emit('reset');
-      }
-    }, {
-      key: "_handleClickEvent",
-      value: function _handleClickEvent(e) {
-        var _getEventCoordinates5 = getEventCoordinates(e),
-          pageX = _getEventCoordinates5.pageX,
-          pageY = _getEventCoordinates5.pageY,
-          clientX = _getEventCoordinates5.clientX,
-          clientY = _getEventCoordinates5.clientY;
-        var now = new Date().getTime();
-        if (this._lastClickData && now - this._lastClickData.timestamp < clickInterval) {
-          // Double click event
-          this._lastClickData = null;
-          return this.emit('doubleClick', {
-            x: pageX,
-            y: pageY,
-            clientX: clientX,
-            clientY: clientY
-          });
-        }
-
-        // Click event
-        this._lastClickData = {
-          timestamp: now
-        };
-        return this.emit('click', {
-          x: pageX,
-          y: pageY,
-          clientX: clientX,
-          clientY: clientY
-        });
-      }
-    }, {
-      key: "_handleMoveEvent",
-      value: function _handleMoveEvent(e) {
-        if (this._initialEventData === null || this.isDetached) {
-          return;
-        }
-        var _this$_initialEventDa = this._initialEventData,
-          x = _this$_initialEventDa.x,
-          y = _this$_initialEventDa.y;
-        var _getEventCoordinates6 = getEventCoordinates(e),
-          pageX = _getEventCoordinates6.pageX,
-          pageY = _getEventCoordinates6.pageY;
-        var w = Math.abs(x - pageX);
-        var h = Math.abs(y - pageY);
-        var left = Math.min(pageX, x),
-          top = Math.min(pageY, y),
-          old = this.selecting;
-
-        // Prevent emitting selectStart event until mouse is moved.
-        // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
-        if (this.isClick(pageX, pageY) && !old && !(w || h)) return;
-        this.selecting = true;
-        this._selectRect = {
-          top: top,
-          left: left,
-          x: pageX,
-          y: pageY,
-          right: left + w,
-          bottom: top + h
-        };
-        if (!old) this.emit('selectStart', this._initialEventData);
-        if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
-        e.preventDefault();
-      }
-    }, {
-      key: "_keyListener",
-      value: function _keyListener(e) {
-        this.ctrl = e.metaKey || e.ctrlKey;
-      }
-    }, {
-      key: "isClick",
-      value: function isClick(pageX, pageY) {
-        var _this$_initialEventDa2 = this._initialEventData,
-          x = _this$_initialEventDa2.x,
-          y = _this$_initialEventDa2.y,
-          isTouch = _this$_initialEventDa2.isTouch;
-        return !isTouch && Math.abs(pageX - x) <= clickTolerance && Math.abs(pageY - y) <= clickTolerance;
-      }
-    }]);
-    return Selection;
-  }();
-  /**
-   * Resolve the disance prop from either an Int or an Object
-   * @return {Object}
-   */
-  function normalizeDistance() {
-    var distance = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
-    if (_typeof(distance) !== 'object') distance = {
-      top: distance,
-      left: distance,
-      right: distance,
-      bottom: distance
-    };
-    return distance;
-  }
-
-  /**
-   * Given two objects containing "top", "left", "offsetWidth" and "offsetHeight"
-   * properties, determine if they collide.
-   * @param  {Object|HTMLElement} a
-   * @param  {Object|HTMLElement} b
-   * @return {bool}
-   */
-  function objectsCollide(nodeA, nodeB) {
-    var tolerance = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 0;
-    var _getBoundsForNode = getBoundsForNode(nodeA),
-      aTop = _getBoundsForNode.top,
-      aLeft = _getBoundsForNode.left,
-      _getBoundsForNode$rig = _getBoundsForNode.right,
-      aRight = _getBoundsForNode$rig === void 0 ? aLeft : _getBoundsForNode$rig,
-      _getBoundsForNode$bot = _getBoundsForNode.bottom,
-      aBottom = _getBoundsForNode$bot === void 0 ? aTop : _getBoundsForNode$bot;
-    var _getBoundsForNode2 = getBoundsForNode(nodeB),
-      bTop = _getBoundsForNode2.top,
-      bLeft = _getBoundsForNode2.left,
-      _getBoundsForNode2$ri = _getBoundsForNode2.right,
-      bRight = _getBoundsForNode2$ri === void 0 ? bLeft : _getBoundsForNode2$ri,
-      _getBoundsForNode2$bo = _getBoundsForNode2.bottom,
-      bBottom = _getBoundsForNode2$bo === void 0 ? bTop : _getBoundsForNode2$bo;
-    return !(
-    // 'a' bottom doesn't touch 'b' top
-
-    aBottom - tolerance < bTop ||
-    // 'a' top doesn't touch 'b' bottom
-    aTop + tolerance > bBottom ||
-    // 'a' right doesn't touch 'b' left
-    aRight - tolerance < bLeft ||
-    // 'a' left doesn't touch 'b' right
-    aLeft + tolerance > bRight);
-  }
-
-  /**
-   * Given a node, get everything needed to calculate its boundaries
-   * @param  {HTMLElement} node
-   * @return {Object}
-   */
-  function getBoundsForNode(node) {
-    if (!node.getBoundingClientRect) return node;
-    var rect = node.getBoundingClientRect(),
-      left = rect.left + pageOffset('left'),
-      top = rect.top + pageOffset('top');
-    return {
-      top: top,
-      left: left,
-      right: (node.offsetWidth || 0) + left,
-      bottom: (node.offsetHeight || 0) + top
-    };
-  }
-  function pageOffset(dir) {
-    if (dir === 'left') return window.pageXOffset || document.body.scrollLeft || 0;
-    if (dir === 'top') return window.pageYOffset || document.body.scrollTop || 0;
-  }
-
-  var BackgroundCells = /*#__PURE__*/function (_React$Component) {
-    _inherits(BackgroundCells, _React$Component);
-    var _super = _createSuper(BackgroundCells);
-    function BackgroundCells(props, context) {
-      var _this;
-      _classCallCheck(this, BackgroundCells);
-      _this = _super.call(this, props, context);
-      _this.state = {
-        selecting: false
-      };
-      _this.containerRef = /*#__PURE__*/reactExports.createRef();
-      return _this;
-    }
-    _createClass(BackgroundCells, [{
-      key: "componentDidMount",
-      value: function componentDidMount() {
-        this.props.selectable && this._selectable();
-      }
-    }, {
-      key: "componentWillUnmount",
-      value: function componentWillUnmount() {
-        this._teardownSelectable();
-      }
-    }, {
-      key: "componentDidUpdate",
-      value: function componentDidUpdate(prevProps) {
-        if (!prevProps.selectable && this.props.selectable) this._selectable();
-        if (prevProps.selectable && !this.props.selectable) this._teardownSelectable();
-      }
-    }, {
-      key: "render",
-      value: function render() {
-        var _this$props = this.props,
-          range = _this$props.range,
-          getNow = _this$props.getNow,
-          getters = _this$props.getters,
-          currentDate = _this$props.date,
-          Wrapper = _this$props.components.dateCellWrapper,
-          localizer = _this$props.localizer;
-        var _this$state = this.state,
-          selecting = _this$state.selecting,
-          startIdx = _this$state.startIdx,
-          endIdx = _this$state.endIdx;
-        var current = getNow();
-        return /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row-bg",
-          ref: this.containerRef
-        }, range.map(function (date, index) {
-          var selected = selecting && index >= startIdx && index <= endIdx;
-          var _getters$dayProp = getters.dayProp(date),
-            className = _getters$dayProp.className,
-            style = _getters$dayProp.style;
-          return /*#__PURE__*/React.createElement(Wrapper, {
-            key: index,
-            value: date,
-            range: range
-          }, /*#__PURE__*/React.createElement("div", {
-            style: style,
-            className: clsx('rbc-day-bg', className, selected && 'rbc-selected-cell', localizer.isSameDate(date, current) && 'rbc-today', currentDate && localizer.neq(currentDate, date, 'month') && 'rbc-off-range-bg')
-          }));
-        }));
-      }
-    }, {
-      key: "_selectable",
-      value: function _selectable() {
-        var _this2 = this;
-        var node = this.containerRef.current;
-        var selector = this._selector = new Selection(this.props.container, {
-          longPressThreshold: this.props.longPressThreshold
-        });
-        var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
-          if (!isEvent(node, point) && !isShowMore(node, point)) {
-            var rowBox = getBoundsForNode(node);
-            var _this2$props = _this2.props,
-              range = _this2$props.range,
-              rtl = _this2$props.rtl;
-            if (pointInBox(rowBox, point)) {
-              var currentCell = getSlotAtX(rowBox, point.x, rtl, range.length);
-              _this2._selectSlot({
-                startIdx: currentCell,
-                endIdx: currentCell,
-                action: actionType,
-                box: point
-              });
-            }
-          }
-          _this2._initial = {};
-          _this2.setState({
-            selecting: false
-          });
-        };
-        selector.on('selecting', function (box) {
-          var _this2$props2 = _this2.props,
-            range = _this2$props2.range,
-            rtl = _this2$props2.rtl;
-          var startIdx = -1;
-          var endIdx = -1;
-          if (!_this2.state.selecting) {
-            notify(_this2.props.onSelectStart, [box]);
-            _this2._initial = {
-              x: box.x,
-              y: box.y
-            };
-          }
-          if (selector.isSelected(node)) {
-            var nodeBox = getBoundsForNode(node);
-            var _dateCellSelection = dateCellSelection(_this2._initial, nodeBox, box, range.length, rtl);
-            startIdx = _dateCellSelection.startIdx;
-            endIdx = _dateCellSelection.endIdx;
-          }
-          _this2.setState({
-            selecting: true,
-            startIdx: startIdx,
-            endIdx: endIdx
-          });
-        });
-        selector.on('beforeSelect', function (box) {
-          if (_this2.props.selectable !== 'ignoreEvents') return;
-          return !isEvent(_this2.containerRef.current, box);
-        });
-        selector.on('click', function (point) {
-          return selectorClicksHandler(point, 'click');
-        });
-        selector.on('doubleClick', function (point) {
-          return selectorClicksHandler(point, 'doubleClick');
-        });
-        selector.on('select', function (bounds) {
-          _this2._selectSlot(_objectSpread2(_objectSpread2({}, _this2.state), {}, {
-            action: 'select',
-            bounds: bounds
-          }));
-          _this2._initial = {};
-          _this2.setState({
-            selecting: false
-          });
-          notify(_this2.props.onSelectEnd, [_this2.state]);
-        });
-      }
-    }, {
-      key: "_teardownSelectable",
-      value: function _teardownSelectable() {
-        if (!this._selector) return;
-        this._selector.teardown();
-        this._selector = null;
-      }
-    }, {
-      key: "_selectSlot",
-      value: function _selectSlot(_ref) {
-        var endIdx = _ref.endIdx,
-          startIdx = _ref.startIdx,
-          action = _ref.action,
-          bounds = _ref.bounds,
-          box = _ref.box;
-        if (endIdx !== -1 && startIdx !== -1) this.props.onSelectSlot && this.props.onSelectSlot({
-          start: startIdx,
-          end: endIdx,
-          action: action,
-          bounds: bounds,
-          box: box,
-          resourceId: this.props.resourceId
-        });
-      }
-    }]);
-    return BackgroundCells;
-  }(React.Component);
-
-  /* eslint-disable react/prop-types */
-  var EventRowMixin = {
-    propTypes: {
-      slotMetrics: propTypesExports.object.isRequired,
-      selected: propTypesExports.object,
-      isAllDay: propTypesExports.bool,
-      accessors: propTypesExports.object.isRequired,
-      localizer: propTypesExports.object.isRequired,
-      components: propTypesExports.object.isRequired,
-      getters: propTypesExports.object.isRequired,
-      onSelect: propTypesExports.func,
-      onDoubleClick: propTypesExports.func,
-      onKeyPress: propTypesExports.func
-    },
-    defaultProps: {
-      segments: [],
-      selected: {}
-    },
-    renderEvent: function renderEvent(props, event) {
-      var selected = props.selected;
-        props.isAllDay;
-        var accessors = props.accessors,
-        getters = props.getters,
-        onSelect = props.onSelect,
-        onDoubleClick = props.onDoubleClick,
-        onKeyPress = props.onKeyPress,
-        localizer = props.localizer,
-        slotMetrics = props.slotMetrics,
-        components = props.components,
-        resizable = props.resizable;
-      var continuesPrior = slotMetrics.continuesPrior(event);
-      var continuesAfter = slotMetrics.continuesAfter(event);
-      return /*#__PURE__*/React.createElement(EventCell, {
-        event: event,
-        getters: getters,
-        localizer: localizer,
-        accessors: accessors,
-        components: components,
-        onSelect: onSelect,
-        onDoubleClick: onDoubleClick,
-        onKeyPress: onKeyPress,
-        continuesPrior: continuesPrior,
-        continuesAfter: continuesAfter,
-        slotStart: slotMetrics.first,
-        slotEnd: slotMetrics.last,
-        selected: isSelected(event, selected),
-        resizable: resizable
-      });
-    },
-    renderSpan: function renderSpan(slots, len, key) {
-      var content = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : ' ';
-      var per = Math.abs(len) / slots * 100 + '%';
-      return /*#__PURE__*/React.createElement("div", {
-        key: key,
-        className: "rbc-row-segment"
-        // IE10/11 need max-width. flex-basis doesn't respect box-sizing
-        ,
-        style: {
-          WebkitFlexBasis: per,
-          flexBasis: per,
-          maxWidth: per
-        }
-      }, content);
-    }
-  };
-
-  var EventRow = /*#__PURE__*/function (_React$Component) {
-    _inherits(EventRow, _React$Component);
-    var _super = _createSuper(EventRow);
-    function EventRow() {
-      _classCallCheck(this, EventRow);
-      return _super.apply(this, arguments);
-    }
-    _createClass(EventRow, [{
-      key: "render",
-      value: function render() {
-        var _this = this;
-        var _this$props = this.props,
-          segments = _this$props.segments,
-          slots = _this$props.slotMetrics.slots,
-          className = _this$props.className;
-        var lastEnd = 1;
-        return /*#__PURE__*/React.createElement("div", {
-          className: clsx(className, 'rbc-row')
-        }, segments.reduce(function (row, _ref, li) {
-          var event = _ref.event,
-            left = _ref.left,
-            right = _ref.right,
-            span = _ref.span;
-          var key = '_lvl_' + li;
-          var gap = left - lastEnd;
-          var content = EventRowMixin.renderEvent(_this.props, event);
-          if (gap) row.push(EventRowMixin.renderSpan(slots, gap, "".concat(key, "_gap")));
-          row.push(EventRowMixin.renderSpan(slots, span, key, content));
-          lastEnd = right + 1;
-          return row;
-        }, []));
-      }
-    }]);
-    return EventRow;
-  }(React.Component);
-  EventRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
-
-  /**
-   * The base implementation of `_.findIndex` and `_.findLastIndex` without
-   * support for iteratee shorthands.
-   *
-   * @private
-   * @param {Array} array The array to inspect.
-   * @param {Function} predicate The function invoked per iteration.
-   * @param {number} fromIndex The index to search from.
-   * @param {boolean} [fromRight] Specify iterating from right to left.
-   * @returns {number} Returns the index of the matched value, else `-1`.
-   */
-
-  function baseFindIndex$1(array, predicate, fromIndex, fromRight) {
-    var length = array.length,
-        index = fromIndex + (fromRight ? 1 : -1);
-
-    while ((fromRight ? index-- : ++index < length)) {
-      if (predicate(array[index], index, array)) {
-        return index;
-      }
-    }
-    return -1;
-  }
-
-  var _baseFindIndex = baseFindIndex$1;
-
-  var Stack$1 = _Stack,
-      baseIsEqual$1 = _baseIsEqual;
-
-  /** Used to compose bitmasks for value comparisons. */
-  var COMPARE_PARTIAL_FLAG$1 = 1,
-      COMPARE_UNORDERED_FLAG$1 = 2;
-
-  /**
-   * The base implementation of `_.isMatch` without support for iteratee shorthands.
-   *
-   * @private
-   * @param {Object} object The object to inspect.
-   * @param {Object} source The object of property values to match.
-   * @param {Array} matchData The property names, values, and compare flags to match.
-   * @param {Function} [customizer] The function to customize comparisons.
-   * @returns {boolean} Returns `true` if `object` is a match, else `false`.
-   */
-  function baseIsMatch$1(object, source, matchData, customizer) {
-    var index = matchData.length,
-        length = index,
-        noCustomizer = !customizer;
-
-    if (object == null) {
-      return !length;
-    }
-    object = Object(object);
-    while (index--) {
-      var data = matchData[index];
-      if ((noCustomizer && data[2])
-            ? data[1] !== object[data[0]]
-            : !(data[0] in object)
-          ) {
-        return false;
-      }
-    }
-    while (++index < length) {
-      data = matchData[index];
-      var key = data[0],
-          objValue = object[key],
-          srcValue = data[1];
-
-      if (noCustomizer && data[2]) {
-        if (objValue === undefined && !(key in object)) {
-          return false;
-        }
-      } else {
-        var stack = new Stack$1;
-        if (customizer) {
-          var result = customizer(objValue, srcValue, key, object, source, stack);
-        }
-        if (!(result === undefined
-              ? baseIsEqual$1(srcValue, objValue, COMPARE_PARTIAL_FLAG$1 | COMPARE_UNORDERED_FLAG$1, customizer, stack)
-              : result
-            )) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  var _baseIsMatch = baseIsMatch$1;
-
-  var isObject$4 = isObject_1;
-
-  /**
-   * Checks if `value` is suitable for strict equality comparisons, i.e. `===`.
-   *
-   * @private
-   * @param {*} value The value to check.
-   * @returns {boolean} Returns `true` if `value` if suitable for strict
-   *  equality comparisons, else `false`.
-   */
-  function isStrictComparable$2(value) {
-    return value === value && !isObject$4(value);
-  }
-
-  var _isStrictComparable = isStrictComparable$2;
-
-  var isStrictComparable$1 = _isStrictComparable,
-      keys$3 = keys_1;
-
-  /**
-   * Gets the property names, values, and compare flags of `object`.
-   *
-   * @private
-   * @param {Object} object The object to query.
-   * @returns {Array} Returns the match data of `object`.
-   */
-  function getMatchData$1(object) {
-    var result = keys$3(object),
-        length = result.length;
-
-    while (length--) {
-      var key = result[length],
-          value = object[key];
-
-      result[length] = [key, value, isStrictComparable$1(value)];
-    }
-    return result;
-  }
-
-  var _getMatchData = getMatchData$1;
-
-  /**
-   * A specialized version of `matchesProperty` for source values suitable
-   * for strict equality comparisons, i.e. `===`.
-   *
-   * @private
-   * @param {string} key The key of the property to get.
-   * @param {*} srcValue The value to match.
-   * @returns {Function} Returns the new spec function.
-   */
-
-  function matchesStrictComparable$2(key, srcValue) {
-    return function(object) {
-      if (object == null) {
-        return false;
-      }
-      return object[key] === srcValue &&
-        (srcValue !== undefined || (key in Object(object)));
-    };
-  }
-
-  var _matchesStrictComparable = matchesStrictComparable$2;
-
-  var baseIsMatch = _baseIsMatch,
-      getMatchData = _getMatchData,
-      matchesStrictComparable$1 = _matchesStrictComparable;
-
-  /**
-   * The base implementation of `_.matches` which doesn't clone `source`.
-   *
-   * @private
-   * @param {Object} source The object of property values to match.
-   * @returns {Function} Returns the new spec function.
-   */
-  function baseMatches$1(source) {
-    var matchData = getMatchData(source);
-    if (matchData.length == 1 && matchData[0][2]) {
-      return matchesStrictComparable$1(matchData[0][0], matchData[0][1]);
-    }
-    return function(object) {
-      return object === source || baseIsMatch(object, source, matchData);
-    };
-  }
-
-  var _baseMatches = baseMatches$1;
-
-  var isArray$8 = isArray_1,
-      isSymbol$3 = isSymbol_1;
-
-  /** Used to match property names within property paths. */
-  var reIsDeepProp = /\.|\[(?:[^[\]]*|(["'])(?:(?!\1)[^\\]|\\.)*?\1)\]/,
-      reIsPlainProp = /^\w*$/;
-
-  /**
-   * Checks if `value` is a property name and not a property path.
-   *
-   * @private
-   * @param {*} value The value to check.
-   * @param {Object} [object] The object to query keys on.
-   * @returns {boolean} Returns `true` if `value` is a property name, else `false`.
-   */
-  function isKey$3(value, object) {
-    if (isArray$8(value)) {
-      return false;
-    }
-    var type = typeof value;
-    if (type == 'number' || type == 'symbol' || type == 'boolean' ||
-        value == null || isSymbol$3(value)) {
-      return true;
-    }
-    return reIsPlainProp.test(value) || !reIsDeepProp.test(value) ||
-      (object != null && value in Object(object));
-  }
-
-  var _isKey = isKey$3;
-
-  var MapCache = _MapCache;
-
-  /** Error message constants. */
-  var FUNC_ERROR_TEXT = 'Expected a function';
-
-  /**
-   * Creates a function that memoizes the result of `func`. If `resolver` is
-   * provided, it determines the cache key for storing the result based on the
-   * arguments provided to the memoized function. By default, the first argument
-   * provided to the memoized function is used as the map cache key. The `func`
-   * is invoked with the `this` binding of the memoized function.
-   *
-   * **Note:** The cache is exposed as the `cache` property on the memoized
-   * function. Its creation may be customized by replacing the `_.memoize.Cache`
-   * constructor with one whose instances implement the
-   * [`Map`](http://ecma-international.org/ecma-262/7.0/#sec-properties-of-the-map-prototype-object)
-   * method interface of `clear`, `delete`, `get`, `has`, and `set`.
-   *
-   * @static
-   * @memberOf _
-   * @since 0.1.0
-   * @category Function
-   * @param {Function} func The function to have its output memoized.
-   * @param {Function} [resolver] The function to resolve the cache key.
-   * @returns {Function} Returns the new memoized function.
-   * @example
-   *
-   * var object = { 'a': 1, 'b': 2 };
-   * var other = { 'c': 3, 'd': 4 };
-   *
-   * var values = _.memoize(_.values);
-   * values(object);
-   * // => [1, 2]
-   *
-   * values(other);
-   * // => [3, 4]
-   *
-   * object.a = 2;
-   * values(object);
-   * // => [1, 2]
-   *
-   * // Modify the result cache.
-   * values.cache.set(object, ['a', 'b']);
-   * values(object);
-   * // => ['a', 'b']
-   *
-   * // Replace `_.memoize.Cache`.
-   * _.memoize.Cache = WeakMap;
-   */
-  function memoize$1(func, resolver) {
-    if (typeof func != 'function' || (resolver != null && typeof resolver != 'function')) {
-      throw new TypeError(FUNC_ERROR_TEXT);
-    }
-    var memoized = function() {
-      var args = arguments,
-          key = resolver ? resolver.apply(this, args) : args[0],
-          cache = memoized.cache;
-
-      if (cache.has(key)) {
-        return cache.get(key);
-      }
-      var result = func.apply(this, args);
-      memoized.cache = cache.set(key, result) || cache;
-      return result;
-    };
-    memoized.cache = new (memoize$1.Cache || MapCache);
-    return memoized;
-  }
-
-  // Expose `MapCache`.
-  memoize$1.Cache = MapCache;
-
-  var memoize_1 = memoize$1;
-
-  var memoize = memoize_1;
-
-  /** Used as the maximum memoize cache size. */
-  var MAX_MEMOIZE_SIZE = 500;
-
-  /**
-   * A specialized version of `_.memoize` which clears the memoized function's
-   * cache when it exceeds `MAX_MEMOIZE_SIZE`.
-   *
-   * @private
-   * @param {Function} func The function to have its output memoized.
-   * @returns {Function} Returns the new memoized function.
-   */
-  function memoizeCapped$1(func) {
-    var result = memoize(func, function(key) {
-      if (cache.size === MAX_MEMOIZE_SIZE) {
-        cache.clear();
-      }
-      return key;
-    });
-
-    var cache = result.cache;
-    return result;
-  }
-
-  var _memoizeCapped = memoizeCapped$1;
-
-  var memoizeCapped = _memoizeCapped;
-
-  /** Used to match property names within property paths. */
-  var rePropName = /[^.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|$))/g;
-
-  /** Used to match backslashes in property paths. */
-  var reEscapeChar = /\\(\\)?/g;
-
-  /**
-   * Converts `string` to a property path array.
-   *
-   * @private
-   * @param {string} string The string to convert.
-   * @returns {Array} Returns the property path array.
-   */
-  var stringToPath$1 = memoizeCapped(function(string) {
-    var result = [];
-    if (string.charCodeAt(0) === 46 /* . */) {
-      result.push('');
-    }
-    string.replace(rePropName, function(match, number, quote, subString) {
-      result.push(quote ? subString.replace(reEscapeChar, '$1') : (number || match));
-    });
-    return result;
-  });
-
-  var _stringToPath = stringToPath$1;
-
-  /**
-   * A specialized version of `_.map` for arrays without support for iteratee
-   * shorthands.
-   *
-   * @private
-   * @param {Array} [array] The array to iterate over.
-   * @param {Function} iteratee The function invoked per iteration.
-   * @returns {Array} Returns the new mapped array.
-   */
-
-  function arrayMap$3(array, iteratee) {
-    var index = -1,
-        length = array == null ? 0 : array.length,
-        result = Array(length);
-
-    while (++index < length) {
-      result[index] = iteratee(array[index], index, array);
-    }
-    return result;
-  }
-
-  var _arrayMap = arrayMap$3;
-
-  var Symbol$3 = _Symbol,
-      arrayMap$2 = _arrayMap,
-      isArray$7 = isArray_1,
-      isSymbol$2 = isSymbol_1;
-
-  /** Used as references for various `Number` constants. */
-  var INFINITY$1 = 1 / 0;
-
-  /** Used to convert symbols to primitives and strings. */
-  var symbolProto$1 = Symbol$3 ? Symbol$3.prototype : undefined,
-      symbolToString = symbolProto$1 ? symbolProto$1.toString : undefined;
-
-  /**
-   * The base implementation of `_.toString` which doesn't convert nullish
-   * values to empty strings.
-   *
-   * @private
-   * @param {*} value The value to process.
-   * @returns {string} Returns the string.
-   */
-  function baseToString$1(value) {
-    // Exit early for strings to avoid a performance hit in some environments.
-    if (typeof value == 'string') {
-      return value;
-    }
-    if (isArray$7(value)) {
-      // Recursively convert values (susceptible to call stack limits).
-      return arrayMap$2(value, baseToString$1) + '';
-    }
-    if (isSymbol$2(value)) {
-      return symbolToString ? symbolToString.call(value) : '';
-    }
-    var result = (value + '');
-    return (result == '0' && (1 / value) == -INFINITY$1) ? '-0' : result;
-  }
-
-  var _baseToString = baseToString$1;
-
-  var baseToString = _baseToString;
-
-  /**
-   * Converts `value` to a string. An empty string is returned for `null`
-   * and `undefined` values. The sign of `-0` is preserved.
-   *
-   * @static
-   * @memberOf _
-   * @since 4.0.0
-   * @category Lang
-   * @param {*} value The value to convert.
-   * @returns {string} Returns the converted string.
-   * @example
-   *
-   * _.toString(null);
-   * // => ''
-   *
-   * _.toString(-0);
-   * // => '-0'
-   *
-   * _.toString([1, 2, 3]);
-   * // => '1,2,3'
-   */
-  function toString$1(value) {
-    return value == null ? '' : baseToString(value);
-  }
-
-  var toString_1 = toString$1;
-
-  var isArray$6 = isArray_1,
-      isKey$2 = _isKey,
-      stringToPath = _stringToPath,
-      toString = toString_1;
-
-  /**
-   * Casts `value` to a path array if it's not one.
-   *
-   * @private
-   * @param {*} value The value to inspect.
-   * @param {Object} [object] The object to query keys on.
-   * @returns {Array} Returns the cast property path array.
-   */
-  function castPath$4(value, object) {
-    if (isArray$6(value)) {
-      return value;
-    }
-    return isKey$2(value, object) ? [value] : stringToPath(toString(value));
-  }
-
-  var _castPath = castPath$4;
-
-  var isSymbol$1 = isSymbol_1;
-
-  /** Used as references for various `Number` constants. */
-  var INFINITY = 1 / 0;
-
-  /**
-   * Converts `value` to a string key if it's not a string or symbol.
-   *
-   * @private
-   * @param {*} value The value to inspect.
-   * @returns {string|symbol} Returns the key.
-   */
-  function toKey$5(value) {
-    if (typeof value == 'string' || isSymbol$1(value)) {
-      return value;
-    }
-    var result = (value + '');
-    return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
-  }
-
-  var _toKey = toKey$5;
-
-  var castPath$3 = _castPath,
-      toKey$4 = _toKey;
-
-  /**
-   * The base implementation of `_.get` without support for default values.
-   *
-   * @private
-   * @param {Object} object The object to query.
-   * @param {Array|string} path The path of the property to get.
-   * @returns {*} Returns the resolved value.
-   */
-  function baseGet$4(object, path) {
-    path = castPath$3(path, object);
-
-    var index = 0,
-        length = path.length;
-
-    while (object != null && index < length) {
-      object = object[toKey$4(path[index++])];
-    }
-    return (index && index == length) ? object : undefined;
-  }
-
-  var _baseGet = baseGet$4;
-
-  var baseGet$3 = _baseGet;
-
-  /**
-   * Gets the value at `path` of `object`. If the resolved value is
-   * `undefined`, the `defaultValue` is returned in its place.
-   *
-   * @static
-   * @memberOf _
-   * @since 3.7.0
-   * @category Object
-   * @param {Object} object The object to query.
-   * @param {Array|string} path The path of the property to get.
-   * @param {*} [defaultValue] The value returned for `undefined` resolved values.
-   * @returns {*} Returns the resolved value.
-   * @example
-   *
-   * var object = { 'a': [{ 'b': { 'c': 3 } }] };
-   *
-   * _.get(object, 'a[0].b.c');
-   * // => 3
-   *
-   * _.get(object, ['a', '0', 'b', 'c']);
-   * // => 3
-   *
-   * _.get(object, 'a.b.c', 'default');
-   * // => 'default'
-   */
-  function get$1(object, path, defaultValue) {
-    var result = object == null ? undefined : baseGet$3(object, path);
-    return result === undefined ? defaultValue : result;
-  }
-
-  var get_1 = get$1;
-
-  /**
-   * The base implementation of `_.hasIn` without support for deep paths.
-   *
-   * @private
-   * @param {Object} [object] The object to query.
-   * @param {Array|string} key The key to check.
-   * @returns {boolean} Returns `true` if `key` exists, else `false`.
-   */
-
-  function baseHasIn$1(object, key) {
-    return object != null && key in Object(object);
-  }
-
-  var _baseHasIn = baseHasIn$1;
-
-  var castPath$2 = _castPath,
-      isArguments$1 = isArguments_1,
-      isArray$5 = isArray_1,
-      isIndex = _isIndex,
-      isLength = isLength_1,
-      toKey$3 = _toKey;
-
-  /**
-   * Checks if `path` exists on `object`.
-   *
-   * @private
-   * @param {Object} object The object to query.
-   * @param {Array|string} path The path to check.
-   * @param {Function} hasFunc The function to check properties.
-   * @returns {boolean} Returns `true` if `path` exists, else `false`.
-   */
-  function hasPath$1(object, path, hasFunc) {
-    path = castPath$2(path, object);
-
-    var index = -1,
-        length = path.length,
-        result = false;
-
-    while (++index < length) {
-      var key = toKey$3(path[index]);
-      if (!(result = object != null && hasFunc(object, key))) {
-        break;
-      }
-      object = object[key];
-    }
-    if (result || ++index != length) {
-      return result;
-    }
-    length = object == null ? 0 : object.length;
-    return !!length && isLength(length) && isIndex(key, length) &&
-      (isArray$5(object) || isArguments$1(object));
-  }
-
-  var _hasPath = hasPath$1;
-
-  var baseHasIn = _baseHasIn,
-      hasPath = _hasPath;
-
-  /**
-   * Checks if `path` is a direct or inherited property of `object`.
-   *
-   * @static
-   * @memberOf _
-   * @since 4.0.0
-   * @category Object
-   * @param {Object} object The object to query.
-   * @param {Array|string} path The path to check.
-   * @returns {boolean} Returns `true` if `path` exists, else `false`.
-   * @example
-   *
-   * var object = _.create({ 'a': _.create({ 'b': 2 }) });
-   *
-   * _.hasIn(object, 'a');
-   * // => true
-   *
-   * _.hasIn(object, 'a.b');
-   * // => true
-   *
-   * _.hasIn(object, ['a', 'b']);
-   * // => true
-   *
-   * _.hasIn(object, 'b');
-   * // => false
-   */
-  function hasIn$1(object, path) {
-    return object != null && hasPath(object, path, baseHasIn);
-  }
-
-  var hasIn_1 = hasIn$1;
-
-  var baseIsEqual = _baseIsEqual,
-      get = get_1,
-      hasIn = hasIn_1,
-      isKey$1 = _isKey,
-      isStrictComparable = _isStrictComparable,
-      matchesStrictComparable = _matchesStrictComparable,
-      toKey$2 = _toKey;
-
-  /** Used to compose bitmasks for value comparisons. */
-  var COMPARE_PARTIAL_FLAG = 1,
-      COMPARE_UNORDERED_FLAG = 2;
-
-  /**
-   * The base implementation of `_.matchesProperty` which doesn't clone `srcValue`.
-   *
-   * @private
-   * @param {string} path The path of the property to get.
-   * @param {*} srcValue The value to match.
-   * @returns {Function} Returns the new spec function.
-   */
-  function baseMatchesProperty$1(path, srcValue) {
-    if (isKey$1(path) && isStrictComparable(srcValue)) {
-      return matchesStrictComparable(toKey$2(path), srcValue);
-    }
-    return function(object) {
-      var objValue = get(object, path);
-      return (objValue === undefined && objValue === srcValue)
-        ? hasIn(object, path)
-        : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
-    };
-  }
-
-  var _baseMatchesProperty = baseMatchesProperty$1;
-
-  /**
-   * This method returns the first argument it receives.
-   *
-   * @static
-   * @since 0.1.0
-   * @memberOf _
-   * @category Util
-   * @param {*} value Any value.
-   * @returns {*} Returns `value`.
-   * @example
-   *
-   * var object = { 'a': 1 };
-   *
-   * console.log(_.identity(object) === object);
-   * // => true
-   */
-
-  function identity$4(value) {
-    return value;
-  }
-
-  var identity_1 = identity$4;
-
-  /**
-   * The base implementation of `_.property` without support for deep paths.
-   *
-   * @private
-   * @param {string} key The key of the property to get.
-   * @returns {Function} Returns the new accessor function.
-   */
-
-  function baseProperty$1(key) {
-    return function(object) {
-      return object == null ? undefined : object[key];
-    };
-  }
-
-  var _baseProperty = baseProperty$1;
-
-  var baseGet$2 = _baseGet;
-
-  /**
-   * A specialized version of `baseProperty` which supports deep paths.
-   *
-   * @private
-   * @param {Array|string} path The path of the property to get.
-   * @returns {Function} Returns the new accessor function.
-   */
-  function basePropertyDeep$1(path) {
-    return function(object) {
-      return baseGet$2(object, path);
-    };
-  }
-
-  var _basePropertyDeep = basePropertyDeep$1;
-
-  var baseProperty = _baseProperty,
-      basePropertyDeep = _basePropertyDeep,
-      isKey = _isKey,
-      toKey$1 = _toKey;
-
-  /**
-   * Creates a function that returns the value at `path` of a given object.
-   *
-   * @static
-   * @memberOf _
-   * @since 2.4.0
-   * @category Util
-   * @param {Array|string} path The path of the property to get.
-   * @returns {Function} Returns the new accessor function.
-   * @example
-   *
-   * var objects = [
-   *   { 'a': { 'b': 2 } },
-   *   { 'a': { 'b': 1 } }
-   * ];
-   *
-   * _.map(objects, _.property('a.b'));
-   * // => [2, 1]
-   *
-   * _.map(_.sortBy(objects, _.property(['a', 'b'])), 'a.b');
-   * // => [1, 2]
-   */
-  function property$1(path) {
-    return isKey(path) ? baseProperty(toKey$1(path)) : basePropertyDeep(path);
-  }
-
-  var property_1 = property$1;
-
-  var baseMatches = _baseMatches,
-      baseMatchesProperty = _baseMatchesProperty,
-      identity$3 = identity_1,
-      isArray$4 = isArray_1,
-      property = property_1;
-
-  /**
-   * The base implementation of `_.iteratee`.
-   *
-   * @private
-   * @param {*} [value=_.identity] The value to convert to an iteratee.
-   * @returns {Function} Returns the iteratee.
-   */
-  function baseIteratee$4(value) {
-    // Don't store the `typeof` result in a variable to avoid a JIT bug in Safari 9.
-    // See https://bugs.webkit.org/show_bug.cgi?id=156034 for more details.
-    if (typeof value == 'function') {
-      return value;
-    }
-    if (value == null) {
-      return identity$3;
-    }
-    if (typeof value == 'object') {
-      return isArray$4(value)
-        ? baseMatchesProperty(value[0], value[1])
-        : baseMatches(value);
-    }
-    return property(value);
-  }
-
-  var _baseIteratee = baseIteratee$4;
-
-  var baseFindIndex = _baseFindIndex,
-      baseIteratee$3 = _baseIteratee,
-      toInteger = toInteger_1;
-
-  /* Built-in method references for those with the same name as other `lodash` methods. */
-  var nativeMax$2 = Math.max;
-
-  /**
-   * This method is like `_.find` except that it returns the index of the first
-   * element `predicate` returns truthy for instead of the element itself.
-   *
-   * @static
-   * @memberOf _
-   * @since 1.1.0
-   * @category Array
-   * @param {Array} array The array to inspect.
-   * @param {Function} [predicate=_.identity] The function invoked per iteration.
-   * @param {number} [fromIndex=0] The index to search from.
-   * @returns {number} Returns the index of the found element, else `-1`.
-   * @example
-   *
-   * var users = [
-   *   { 'user': 'barney',  'active': false },
-   *   { 'user': 'fred',    'active': false },
-   *   { 'user': 'pebbles', 'active': true }
-   * ];
-   *
-   * _.findIndex(users, function(o) { return o.user == 'barney'; });
-   * // => 0
-   *
-   * // The `_.matches` iteratee shorthand.
-   * _.findIndex(users, { 'user': 'fred', 'active': false });
-   * // => 1
-   *
-   * // The `_.matchesProperty` iteratee shorthand.
-   * _.findIndex(users, ['active', false]);
-   * // => 0
-   *
-   * // The `_.property` iteratee shorthand.
-   * _.findIndex(users, 'active');
-   * // => 2
-   */
-  function findIndex(array, predicate, fromIndex) {
-    var length = array == null ? 0 : array.length;
-    if (!length) {
-      return -1;
-    }
-    var index = fromIndex == null ? 0 : toInteger(fromIndex);
-    if (index < 0) {
-      index = nativeMax$2(length + index, 0);
-    }
-    return baseFindIndex(array, baseIteratee$3(predicate), index);
-  }
-
-  var findIndex_1 = findIndex;
-
-  function endOfRange(_ref) {
-    var dateRange = _ref.dateRange,
-      _ref$unit = _ref.unit,
-      unit = _ref$unit === void 0 ? 'day' : _ref$unit,
-      localizer = _ref.localizer;
-    return {
-      first: dateRange[0],
-      last: localizer.add(dateRange[dateRange.length - 1], 1, unit)
-    };
-  }
-
-  // properly calculating segments requires working with dates in
-  // the timezone we're working with, so we use the localizer
-  function eventSegments(event, range, accessors, localizer) {
-    var _endOfRange = endOfRange({
-        dateRange: range,
-        localizer: localizer
-      }),
-      first = _endOfRange.first,
-      last = _endOfRange.last;
-    var slots = localizer.diff(first, last, 'day');
-    var start = localizer.max(localizer.startOf(accessors.start(event), 'day'), first);
-    var end = localizer.min(localizer.ceil(accessors.end(event), 'day'), last);
-    var padding = findIndex_1(range, function (x) {
-      return localizer.isSameDate(x, start);
-    });
-    var span = localizer.diff(start, end, 'day');
-    span = Math.min(span, slots);
-    // The segmentOffset is necessary when adjusting for timezones
-    // ahead of the browser timezone
-    span = Math.max(span - localizer.segmentOffset, 1);
-    return {
-      event: event,
-      span: span,
-      left: padding + 1,
-      right: Math.max(padding + span, 1)
-    };
-  }
-  function eventLevels(rowSegments) {
-    var limit = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : Infinity;
-    var i,
-      j,
-      seg,
-      levels = [],
-      extra = [];
-    for (i = 0; i < rowSegments.length; i++) {
-      seg = rowSegments[i];
-      for (j = 0; j < levels.length; j++) if (!segsOverlap(seg, levels[j])) break;
-      if (j >= limit) {
-        extra.push(seg);
-      } else {
-        (levels[j] || (levels[j] = [])).push(seg);
-      }
-    }
-    for (i = 0; i < levels.length; i++) {
-      levels[i].sort(function (a, b) {
-        return a.left - b.left;
-      }); //eslint-disable-line
-    }
-
-    return {
-      levels: levels,
-      extra: extra
-    };
-  }
-  function inRange(e, start, end, accessors, localizer) {
-    var event = {
-      start: accessors.start(e),
-      end: accessors.end(e)
-    };
-    var range = {
-      start: start,
-      end: end
-    };
-    return localizer.inEventRange({
-      event: event,
-      range: range
-    });
-  }
-  function segsOverlap(seg, otherSegs) {
-    return otherSegs.some(function (otherSeg) {
-      return otherSeg.left <= seg.right && otherSeg.right >= seg.left;
-    });
-  }
-  function sortEvents(eventA, eventB, accessors, localizer) {
-    var evtA = {
-      start: accessors.start(eventA),
-      end: accessors.end(eventA),
-      allDay: accessors.allDay(eventA)
-    };
-    var evtB = {
-      start: accessors.start(eventB),
-      end: accessors.end(eventB),
-      allDay: accessors.allDay(eventB)
-    };
-    return localizer.sortEvents({
-      evtA: evtA,
-      evtB: evtB
-    });
-  }
-
-  /* Built-in method references for those with the same name as other `lodash` methods. */
-
-  var nativeCeil = Math.ceil,
-      nativeMax$1 = Math.max;
-
-  /**
-   * The base implementation of `_.range` and `_.rangeRight` which doesn't
-   * coerce arguments.
-   *
-   * @private
-   * @param {number} start The start of the range.
-   * @param {number} end The end of the range.
-   * @param {number} step The value to increment or decrement by.
-   * @param {boolean} [fromRight] Specify iterating from right to left.
-   * @returns {Array} Returns the range of numbers.
-   */
-  function baseRange$1(start, end, step, fromRight) {
-    var index = -1,
-        length = nativeMax$1(nativeCeil((end - start) / (step || 1)), 0),
-        result = Array(length);
-
-    while (length--) {
-      result[fromRight ? length : ++index] = start;
-      start += step;
-    }
-    return result;
-  }
-
-  var _baseRange = baseRange$1;
-
-  var baseRange = _baseRange,
-      isIterateeCall$2 = _isIterateeCall,
-      toFinite = toFinite_1;
-
-  /**
-   * Creates a `_.range` or `_.rangeRight` function.
-   *
-   * @private
-   * @param {boolean} [fromRight] Specify iterating from right to left.
-   * @returns {Function} Returns the new range function.
-   */
-  function createRange$1(fromRight) {
-    return function(start, end, step) {
-      if (step && typeof step != 'number' && isIterateeCall$2(start, end, step)) {
-        end = step = undefined;
-      }
-      // Ensure the sign of `-0` is preserved.
-      start = toFinite(start);
-      if (end === undefined) {
-        end = start;
-        start = 0;
-      } else {
-        end = toFinite(end);
-      }
-      step = step === undefined ? (start < end ? 1 : -1) : toFinite(step);
-      return baseRange(start, end, step, fromRight);
-    };
-  }
-
-  var _createRange = createRange$1;
-
-  var createRange = _createRange;
-
-  /**
-   * Creates an array of numbers (positive and/or negative) progressing from
-   * `start` up to, but not including, `end`. A step of `-1` is used if a negative
-   * `start` is specified without an `end` or `step`. If `end` is not specified,
-   * it's set to `start` with `start` then set to `0`.
-   *
-   * **Note:** JavaScript follows the IEEE-754 standard for resolving
-   * floating-point values which can produce unexpected results.
-   *
-   * @static
-   * @since 0.1.0
-   * @memberOf _
-   * @category Util
-   * @param {number} [start=0] The start of the range.
-   * @param {number} end The end of the range.
-   * @param {number} [step=1] The value to increment or decrement by.
-   * @returns {Array} Returns the range of numbers.
-   * @see _.inRange, _.rangeRight
-   * @example
-   *
-   * _.range(4);
-   * // => [0, 1, 2, 3]
-   *
-   * _.range(-4);
-   * // => [0, -1, -2, -3]
-   *
-   * _.range(1, 5);
-   * // => [1, 2, 3, 4]
-   *
-   * _.range(0, 20, 5);
-   * // => [0, 5, 10, 15]
-   *
-   * _.range(0, -4, -1);
-   * // => [0, -1, -2, -3]
-   *
-   * _.range(1, 4, 0);
-   * // => [1, 1, 1]
-   *
-   * _.range(0);
-   * // => []
-   */
-  var range = createRange();
-
-  var range_1 = range;
-
-  var isSegmentInSlot$1 = function isSegmentInSlot(seg, slot) {
-    return seg.left <= slot && seg.right >= slot;
-  };
-  var eventsInSlot = function eventsInSlot(segments, slot) {
-    return segments.filter(function (seg) {
-      return isSegmentInSlot$1(seg, slot);
-    }).length;
-  };
-  var EventEndingRow = /*#__PURE__*/function (_React$Component) {
-    _inherits(EventEndingRow, _React$Component);
-    var _super = _createSuper(EventEndingRow);
-    function EventEndingRow() {
-      _classCallCheck(this, EventEndingRow);
-      return _super.apply(this, arguments);
-    }
-    _createClass(EventEndingRow, [{
-      key: "render",
-      value: function render() {
-        var _this$props = this.props,
-          segments = _this$props.segments,
-          slots = _this$props.slotMetrics.slots;
-        var rowSegments = eventLevels(segments).levels[0];
-        var current = 1,
-          lastEnd = 1,
-          row = [];
-        while (current <= slots) {
-          var key = '_lvl_' + current;
-          var _ref = rowSegments.filter(function (seg) {
-              return isSegmentInSlot$1(seg, current);
-            })[0] || {},
-            event = _ref.event,
-            left = _ref.left,
-            right = _ref.right,
-            span = _ref.span; //eslint-disable-line
-
-          if (!event) {
-            current++;
-            continue;
-          }
-          var gap = Math.max(0, left - lastEnd);
-          if (this.canRenderSlotEvent(left, span)) {
-            var content = EventRowMixin.renderEvent(this.props, event);
-            if (gap) {
-              row.push(EventRowMixin.renderSpan(slots, gap, key + '_gap'));
-            }
-            row.push(EventRowMixin.renderSpan(slots, span, key, content));
-            lastEnd = current = right + 1;
-          } else {
-            if (gap) {
-              row.push(EventRowMixin.renderSpan(slots, gap, key + '_gap'));
-            }
-            row.push(EventRowMixin.renderSpan(slots, 1, key, this.renderShowMore(segments, current)));
-            lastEnd = current = current + 1;
-          }
-        }
-        return /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row"
-        }, row);
-      }
-    }, {
-      key: "canRenderSlotEvent",
-      value: function canRenderSlotEvent(slot, span) {
-        var segments = this.props.segments;
-        return range_1(slot, slot + span).every(function (s) {
-          var count = eventsInSlot(segments, s);
-          return count === 1;
-        });
-      }
-    }, {
-      key: "renderShowMore",
-      value: function renderShowMore(segments, slot) {
-        var _this = this;
-        var localizer = this.props.localizer;
-        var count = eventsInSlot(segments, slot);
-        return count ? /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          key: 'sm_' + slot,
-          className: clsx('rbc-button-link', 'rbc-show-more'),
-          onClick: function onClick(e) {
-            return _this.showMore(slot, e);
-          }
-        }, localizer.messages.showMore(count)) : false;
-      }
-    }, {
-      key: "showMore",
-      value: function showMore(slot, e) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.props.onShowMore(slot, e.target);
-      }
-    }]);
-    return EventEndingRow;
-  }(React.Component);
-  EventEndingRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
-
-  var ScrollableWeekWrapper = function ScrollableWeekWrapper(_ref) {
-    var children = _ref.children;
-    return /*#__PURE__*/React.createElement("div", {
-      className: "rbc-row-content-scroll-container"
-    }, children);
-  };
-
-  var safeIsNaN = Number.isNaN ||
-      function ponyfill(value) {
-          return typeof value === 'number' && value !== value;
-      };
-  function isEqual$1(first, second) {
-      if (first === second) {
-          return true;
-      }
-      if (safeIsNaN(first) && safeIsNaN(second)) {
-          return true;
-      }
-      return false;
-  }
-  function areInputsEqual(newInputs, lastInputs) {
-      if (newInputs.length !== lastInputs.length) {
-          return false;
-      }
-      for (var i = 0; i < newInputs.length; i++) {
-          if (!isEqual$1(newInputs[i], lastInputs[i])) {
-              return false;
-          }
-      }
-      return true;
-  }
-
-  function memoizeOne(resultFn, isEqual) {
-      if (isEqual === void 0) { isEqual = areInputsEqual; }
-      var cache = null;
-      function memoized() {
-          var newArgs = [];
-          for (var _i = 0; _i < arguments.length; _i++) {
-              newArgs[_i] = arguments[_i];
-          }
-          if (cache && cache.lastThis === this && isEqual(newArgs, cache.lastArgs)) {
-              return cache.lastResult;
-          }
-          var lastResult = resultFn.apply(this, newArgs);
-          cache = {
-              lastResult: lastResult,
-              lastArgs: newArgs,
-              lastThis: this,
-          };
-          return lastResult;
-      }
-      memoized.clear = function clear() {
-          cache = null;
-      };
-      return memoized;
-  }
-
-  var isSegmentInSlot = function isSegmentInSlot(seg, slot) {
-    return seg.left <= slot && seg.right >= slot;
-  };
-  var isEqual = function isEqual(a, b) {
-    return a[0].range === b[0].range && a[0].events === b[0].events;
-  };
-  function getSlotMetrics$1() {
-    return memoizeOne(function (options) {
-      var range = options.range,
-        events = options.events,
-        maxRows = options.maxRows,
-        minRows = options.minRows,
-        accessors = options.accessors,
-        localizer = options.localizer;
-      var _endOfRange = endOfRange({
-          dateRange: range,
-          localizer: localizer
-        }),
-        first = _endOfRange.first,
-        last = _endOfRange.last;
-      var segments = events.map(function (evt) {
-        return eventSegments(evt, range, accessors, localizer);
-      });
-      var _eventLevels = eventLevels(segments, Math.max(maxRows - 1, 1)),
-        levels = _eventLevels.levels,
-        extra = _eventLevels.extra;
-      // Subtract 1 from minRows to not include showMore button row when
-      // it would be rendered
-      var minEventRows = extra.length > 0 ? minRows - 1 : minRows;
-      while (levels.length < minEventRows) levels.push([]);
-      return {
-        first: first,
-        last: last,
-        levels: levels,
-        extra: extra,
-        range: range,
-        slots: range.length,
-        clone: function clone(args) {
-          var metrics = getSlotMetrics$1();
-          return metrics(_objectSpread2(_objectSpread2({}, options), args));
-        },
-        getDateForSlot: function getDateForSlot(slotNumber) {
-          return range[slotNumber];
-        },
-        getSlotForDate: function getSlotForDate(date) {
-          return range.find(function (r) {
-            return localizer.isSameDate(r, date);
-          });
-        },
-        getEventsForSlot: function getEventsForSlot(slot) {
-          return segments.filter(function (seg) {
-            return isSegmentInSlot(seg, slot);
-          }).map(function (seg) {
-            return seg.event;
-          });
-        },
-        continuesPrior: function continuesPrior(event) {
-          return localizer.continuesPrior(accessors.start(event), first);
-        },
-        continuesAfter: function continuesAfter(event) {
-          var start = accessors.start(event);
-          var end = accessors.end(event);
-          return localizer.continuesAfter(start, end, last);
-        }
-      };
-    }, isEqual);
-  }
-
-  var DateContentRow = /*#__PURE__*/function (_React$Component) {
-    _inherits(DateContentRow, _React$Component);
-    var _super = _createSuper(DateContentRow);
-    function DateContentRow() {
-      var _this;
-      _classCallCheck(this, DateContentRow);
-      for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
-        args[_key] = arguments[_key];
-      }
-      _this = _super.call.apply(_super, [this].concat(args));
-      _this.handleSelectSlot = function (slot) {
-        var _this$props = _this.props,
-          range = _this$props.range,
-          onSelectSlot = _this$props.onSelectSlot;
-        onSelectSlot(range.slice(slot.start, slot.end + 1), slot);
-      };
-      _this.handleShowMore = function (slot, target) {
-        var _this$props2 = _this.props,
-          range = _this$props2.range,
-          onShowMore = _this$props2.onShowMore;
-        var metrics = _this.slotMetrics(_this.props);
-        var row = qsa(_this.containerRef.current, '.rbc-row-bg')[0];
-        var cell;
-        if (row) cell = row.children[slot - 1];
-        var events = metrics.getEventsForSlot(slot);
-        onShowMore(events, range[slot - 1], cell, slot, target);
-      };
-      _this.getContainer = function () {
-        var container = _this.props.container;
-        return container ? container() : _this.containerRef.current;
-      };
-      _this.renderHeadingCell = function (date, index) {
-        var _this$props3 = _this.props,
-          renderHeader = _this$props3.renderHeader,
-          getNow = _this$props3.getNow,
-          localizer = _this$props3.localizer;
-        return renderHeader({
-          date: date,
-          key: "header_".concat(index),
-          className: clsx('rbc-date-cell', localizer.isSameDate(date, getNow()) && 'rbc-now')
-        });
-      };
-      _this.renderDummy = function () {
-        var _this$props4 = _this.props,
-          className = _this$props4.className,
-          range = _this$props4.range,
-          renderHeader = _this$props4.renderHeader,
-          showAllEvents = _this$props4.showAllEvents;
-        return /*#__PURE__*/React.createElement("div", {
-          className: className,
-          ref: _this.containerRef
-        }, /*#__PURE__*/React.createElement("div", {
-          className: clsx('rbc-row-content', showAllEvents && 'rbc-row-content-scrollable')
-        }, renderHeader && /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row",
-          ref: _this.headingRowRef
-        }, range.map(_this.renderHeadingCell)), /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row",
-          ref: _this.eventRowRef
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row-segment"
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "rbc-event"
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "rbc-event-content"
-        }, "\xA0"))))));
-      };
-      _this.containerRef = /*#__PURE__*/reactExports.createRef();
-      _this.headingRowRef = /*#__PURE__*/reactExports.createRef();
-      _this.eventRowRef = /*#__PURE__*/reactExports.createRef();
-      _this.slotMetrics = getSlotMetrics$1();
-      return _this;
-    }
-    _createClass(DateContentRow, [{
-      key: "getRowLimit",
-      value: function getRowLimit() {
-        var _this$headingRowRef;
-        /* Guessing this only gets called on the dummyRow */
-        var eventHeight = height(this.eventRowRef.current);
-        var headingHeight = (_this$headingRowRef = this.headingRowRef) !== null && _this$headingRowRef !== void 0 && _this$headingRowRef.current ? height(this.headingRowRef.current) : 0;
-        var eventSpace = height(this.containerRef.current) - headingHeight;
-        return Math.max(Math.floor(eventSpace / eventHeight), 1);
-      }
-    }, {
-      key: "render",
-      value: function render() {
-        var _this$props5 = this.props,
-          date = _this$props5.date,
-          rtl = _this$props5.rtl,
-          range = _this$props5.range,
-          className = _this$props5.className,
-          selected = _this$props5.selected,
-          selectable = _this$props5.selectable,
-          renderForMeasure = _this$props5.renderForMeasure,
-          accessors = _this$props5.accessors,
-          getters = _this$props5.getters,
-          components = _this$props5.components,
-          getNow = _this$props5.getNow,
-          renderHeader = _this$props5.renderHeader,
-          onSelect = _this$props5.onSelect,
-          localizer = _this$props5.localizer,
-          onSelectStart = _this$props5.onSelectStart,
-          onSelectEnd = _this$props5.onSelectEnd,
-          onDoubleClick = _this$props5.onDoubleClick,
-          onKeyPress = _this$props5.onKeyPress,
-          resourceId = _this$props5.resourceId,
-          longPressThreshold = _this$props5.longPressThreshold,
-          isAllDay = _this$props5.isAllDay,
-          resizable = _this$props5.resizable,
-          showAllEvents = _this$props5.showAllEvents;
-        if (renderForMeasure) return this.renderDummy();
-        var metrics = this.slotMetrics(this.props);
-        var levels = metrics.levels,
-          extra = metrics.extra;
-        var ScrollableWeekComponent = showAllEvents ? ScrollableWeekWrapper : NoopWrapper;
-        var WeekWrapper = components.weekWrapper;
-        var eventRowProps = {
-          selected: selected,
-          accessors: accessors,
-          getters: getters,
-          localizer: localizer,
-          components: components,
-          onSelect: onSelect,
-          onDoubleClick: onDoubleClick,
-          onKeyPress: onKeyPress,
-          resourceId: resourceId,
-          slotMetrics: metrics,
-          resizable: resizable
-        };
-        return /*#__PURE__*/React.createElement("div", {
-          className: className,
-          role: "rowgroup",
-          ref: this.containerRef
-        }, /*#__PURE__*/React.createElement(BackgroundCells, {
-          localizer: localizer,
-          date: date,
-          getNow: getNow,
-          rtl: rtl,
-          range: range,
-          selectable: selectable,
-          container: this.getContainer,
-          getters: getters,
-          onSelectStart: onSelectStart,
-          onSelectEnd: onSelectEnd,
-          onSelectSlot: this.handleSelectSlot,
-          components: components,
-          longPressThreshold: longPressThreshold,
-          resourceId: resourceId
-        }), /*#__PURE__*/React.createElement("div", {
-          className: clsx('rbc-row-content', showAllEvents && 'rbc-row-content-scrollable'),
-          role: "row"
-        }, renderHeader && /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row ",
-          ref: this.headingRowRef
-        }, range.map(this.renderHeadingCell)), /*#__PURE__*/React.createElement(ScrollableWeekComponent, null, /*#__PURE__*/React.createElement(WeekWrapper, Object.assign({
-          isAllDay: isAllDay
-        }, eventRowProps, {
-          rtl: this.props.rtl
-        }), levels.map(function (segs, idx) {
-          return /*#__PURE__*/React.createElement(EventRow, Object.assign({
-            key: idx,
-            segments: segs
-          }, eventRowProps));
-        }), !!extra.length && /*#__PURE__*/React.createElement(EventEndingRow, Object.assign({
-          segments: extra,
-          onShowMore: this.handleShowMore
-        }, eventRowProps))))));
-      }
-    }]);
-    return DateContentRow;
-  }(React.Component);
-  DateContentRow.defaultProps = {
-    minRows: 0,
-    maxRows: Infinity
-  };
-
-  var Header = function Header(_ref) {
-    var label = _ref.label;
-    return /*#__PURE__*/React.createElement("span", {
-      role: "columnheader",
-      "aria-sort": "none"
-    }, label);
-  };
-  Header.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node
-  } : {};
-
-  var DateHeader = function DateHeader(_ref) {
-    var label = _ref.label,
-      drilldownView = _ref.drilldownView,
-      onDrillDown = _ref.onDrillDown;
-    if (!drilldownView) {
-      return /*#__PURE__*/React.createElement("span", null, label);
-    }
-    return /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      className: "rbc-button-link",
-      onClick: onDrillDown,
-      role: "cell"
-    }, label);
-  };
-  DateHeader.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node,
-    date: propTypesExports.instanceOf(Date),
-    drilldownView: propTypesExports.string,
-    onDrillDown: propTypesExports.func,
-    isOffRange: propTypesExports.bool
-  } : {};
-
-  var _excluded$6 = ["date", "className"];
-  var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
-    return evts.filter(function (e) {
-      return inRange(e, start, end, accessors, localizer);
-    });
-  };
-  var MonthView = /*#__PURE__*/function (_React$Component) {
-    _inherits(MonthView, _React$Component);
-    var _super = _createSuper(MonthView);
-    function MonthView() {
-      var _this;
-      _classCallCheck(this, MonthView);
-      for (var _len = arguments.length, _args = new Array(_len), _key = 0; _key < _len; _key++) {
-        _args[_key] = arguments[_key];
-      }
-      _this = _super.call.apply(_super, [this].concat(_args));
-      _this.getContainer = function () {
-        return _this.containerRef.current;
-      };
-      _this.renderWeek = function (week, weekIdx) {
-        var _this$props = _this.props,
-          events = _this$props.events,
-          components = _this$props.components,
-          selectable = _this$props.selectable,
-          getNow = _this$props.getNow,
-          selected = _this$props.selected,
-          date = _this$props.date,
-          localizer = _this$props.localizer,
-          longPressThreshold = _this$props.longPressThreshold,
-          accessors = _this$props.accessors,
-          getters = _this$props.getters,
-          showAllEvents = _this$props.showAllEvents;
-        var _this$state = _this.state,
-          needLimitMeasure = _this$state.needLimitMeasure,
-          rowLimit = _this$state.rowLimit;
-
-        // let's not mutate props
-        var weeksEvents = eventsForWeek(_toConsumableArray(events), week[0], week[week.length - 1], accessors, localizer);
-        weeksEvents.sort(function (a, b) {
-          return sortEvents(a, b, accessors, localizer);
-        });
-        return /*#__PURE__*/React.createElement(DateContentRow, {
-          key: weekIdx,
-          ref: weekIdx === 0 ? _this.slotRowRef : undefined,
-          container: _this.getContainer,
-          className: "rbc-month-row",
-          getNow: getNow,
-          date: date,
-          range: week,
-          events: weeksEvents,
-          maxRows: showAllEvents ? Infinity : rowLimit,
-          selected: selected,
-          selectable: selectable,
-          components: components,
-          accessors: accessors,
-          getters: getters,
-          localizer: localizer,
-          renderHeader: _this.readerDateHeading,
-          renderForMeasure: needLimitMeasure,
-          onShowMore: _this.handleShowMore,
-          onSelect: _this.handleSelectEvent,
-          onDoubleClick: _this.handleDoubleClickEvent,
-          onKeyPress: _this.handleKeyPressEvent,
-          onSelectSlot: _this.handleSelectSlot,
-          longPressThreshold: longPressThreshold,
-          rtl: _this.props.rtl,
-          resizable: _this.props.resizable,
-          showAllEvents: showAllEvents
-        });
-      };
-      _this.readerDateHeading = function (_ref) {
-        var date = _ref.date,
-          className = _ref.className,
-          props = _objectWithoutProperties(_ref, _excluded$6);
-        var _this$props2 = _this.props,
-          currentDate = _this$props2.date,
-          getDrilldownView = _this$props2.getDrilldownView,
-          localizer = _this$props2.localizer;
-        var isOffRange = localizer.neq(date, currentDate, 'month');
-        var isCurrent = localizer.isSameDate(date, currentDate);
-        var drilldownView = getDrilldownView(date);
-        var label = localizer.format(date, 'dateFormat');
-        var DateHeaderComponent = _this.props.components.dateHeader || DateHeader;
-        return /*#__PURE__*/React.createElement("div", Object.assign({}, props, {
-          className: clsx(className, isOffRange && 'rbc-off-range', isCurrent && 'rbc-current'),
-          role: "cell"
-        }), /*#__PURE__*/React.createElement(DateHeaderComponent, {
-          label: label,
-          date: date,
-          drilldownView: drilldownView,
-          isOffRange: isOffRange,
-          onDrillDown: function onDrillDown(e) {
-            return _this.handleHeadingClick(date, drilldownView, e);
-          }
-        }));
-      };
-      _this.handleSelectSlot = function (range, slotInfo) {
-        _this._pendingSelection = _this._pendingSelection.concat(range);
-        clearTimeout(_this._selectTimer);
-        _this._selectTimer = setTimeout(function () {
-          return _this.selectDates(slotInfo);
-        });
-      };
-      _this.handleHeadingClick = function (date, view, e) {
-        e.preventDefault();
-        _this.clearSelection();
-        notify(_this.props.onDrillDown, [date, view]);
-      };
-      _this.handleSelectEvent = function () {
-        _this.clearSelection();
-        for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
-          args[_key2] = arguments[_key2];
-        }
-        notify(_this.props.onSelectEvent, args);
-      };
-      _this.handleDoubleClickEvent = function () {
-        _this.clearSelection();
-        for (var _len3 = arguments.length, args = new Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
-          args[_key3] = arguments[_key3];
-        }
-        notify(_this.props.onDoubleClickEvent, args);
-      };
-      _this.handleKeyPressEvent = function () {
-        _this.clearSelection();
-        for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
-          args[_key4] = arguments[_key4];
-        }
-        notify(_this.props.onKeyPressEvent, args);
-      };
-      _this.handleShowMore = function (events, date, cell, slot, target) {
-        var _this$props3 = _this.props,
-          popup = _this$props3.popup,
-          onDrillDown = _this$props3.onDrillDown,
-          onShowMore = _this$props3.onShowMore,
-          getDrilldownView = _this$props3.getDrilldownView,
-          doShowMoreDrillDown = _this$props3.doShowMoreDrillDown;
-        //cancel any pending selections so only the event click goes through.
-        _this.clearSelection();
-        if (popup) {
-          var position$1 = position(cell, _this.containerRef.current);
-          _this.setState({
-            overlay: {
-              date: date,
-              events: events,
-              position: position$1,
-              target: target
-            }
-          });
-        } else if (doShowMoreDrillDown) {
-          notify(onDrillDown, [date, getDrilldownView(date) || views.DAY]);
-        }
-        notify(onShowMore, [events, date, slot]);
-      };
-      _this.overlayDisplay = function () {
-        _this.setState({
-          overlay: null
-        });
-      };
-      _this.state = {
-        rowLimit: 5,
-        needLimitMeasure: true,
-        date: null
-      };
-      _this.containerRef = /*#__PURE__*/reactExports.createRef();
-      _this.slotRowRef = /*#__PURE__*/reactExports.createRef();
-      _this._bgRows = [];
-      _this._pendingSelection = [];
-      return _this;
-    }
-    _createClass(MonthView, [{
-      key: "componentDidMount",
-      value: function componentDidMount() {
-        var _this2 = this;
-        var running;
-        if (this.state.needLimitMeasure) this.measureRowLimit(this.props);
-        window.addEventListener('resize', this._resizeListener = function () {
-          if (!running) {
-            request(function () {
-              running = false;
-              _this2.setState({
-                needLimitMeasure: true
-              }); //eslint-disable-line
-            });
-          }
-        }, false);
-      }
-    }, {
-      key: "componentDidUpdate",
-      value: function componentDidUpdate() {
-        if (this.state.needLimitMeasure) this.measureRowLimit(this.props);
-      }
-    }, {
-      key: "componentWillUnmount",
-      value: function componentWillUnmount() {
-        window.removeEventListener('resize', this._resizeListener, false);
-      }
-    }, {
-      key: "render",
-      value: function render() {
-        var _this$props4 = this.props,
-          date = _this$props4.date,
-          localizer = _this$props4.localizer,
-          className = _this$props4.className,
-          month = localizer.visibleDays(date, localizer),
-          weeks = chunk_1(month, 7);
-        this._weekCount = weeks.length;
-        return /*#__PURE__*/React.createElement("div", {
-          className: clsx('rbc-month-view', className),
-          role: "table",
-          "aria-label": "Month View",
-          ref: this.containerRef
-        }, /*#__PURE__*/React.createElement("div", {
-          className: "rbc-row rbc-month-header",
-          role: "row"
-        }, this.renderHeaders(weeks[0])), weeks.map(this.renderWeek), this.props.popup && this.renderOverlay());
-      }
-    }, {
-      key: "renderHeaders",
-      value: function renderHeaders(row) {
-        var _this$props5 = this.props,
-          localizer = _this$props5.localizer,
-          components = _this$props5.components;
-        var first = row[0];
-        var last = row[row.length - 1];
-        var HeaderComponent = components.header || Header;
-        return localizer.range(first, last, 'day').map(function (day, idx) {
-          return /*#__PURE__*/React.createElement("div", {
-            key: 'header_' + idx,
-            className: "rbc-header"
-          }, /*#__PURE__*/React.createElement(HeaderComponent, {
-            date: day,
-            localizer: localizer,
-            label: localizer.format(day, 'weekdayFormat')
-          }));
-        });
-      }
-    }, {
-      key: "renderOverlay",
-      value: function renderOverlay() {
-        var _this$state$overlay,
-          _this$state2,
-          _this3 = this;
-        var overlay = (_this$state$overlay = (_this$state2 = this.state) === null || _this$state2 === void 0 ? void 0 : _this$state2.overlay) !== null && _this$state$overlay !== void 0 ? _this$state$overlay : {};
-        var _this$props6 = this.props,
-          accessors = _this$props6.accessors,
-          localizer = _this$props6.localizer,
-          components = _this$props6.components,
-          getters = _this$props6.getters,
-          selected = _this$props6.selected,
-          popupOffset = _this$props6.popupOffset,
-          handleDragStart = _this$props6.handleDragStart;
-        var onHide = function onHide() {
-          return _this3.setState({
-            overlay: null
-          });
-        };
-        return /*#__PURE__*/React.createElement(PopOverlay, {
-          overlay: overlay,
-          accessors: accessors,
-          localizer: localizer,
-          components: components,
-          getters: getters,
-          selected: selected,
-          popupOffset: popupOffset,
-          ref: this.containerRef,
-          handleKeyPressEvent: this.handleKeyPressEvent,
-          handleSelectEvent: this.handleSelectEvent,
-          handleDoubleClickEvent: this.handleDoubleClickEvent,
-          handleDragStart: handleDragStart,
-          show: !!overlay.position,
-          overlayDisplay: this.overlayDisplay,
-          onHide: onHide
-        });
-
-        /* return (
-          <Overlay
-            rootClose
-            placement="bottom"
-            show={!!overlay.position}
-            onHide={() => this.setState({ overlay: null })}
-            target={() => overlay.target}
-          >
-            {({ props }) => (
-              <Popup
-                {...props}
-                popupOffset={popupOffset}
-                accessors={accessors}
-                getters={getters}
-                selected={selected}
-                components={components}
-                localizer={localizer}
-                position={overlay.position}
-                show={this.overlayDisplay}
-                events={overlay.events}
-                slotStart={overlay.date}
-                slotEnd={overlay.end}
-                onSelect={this.handleSelectEvent}
-                onDoubleClick={this.handleDoubleClickEvent}
-                onKeyPress={this.handleKeyPressEvent}
-                handleDragStart={this.props.handleDragStart}
-              />
-            )}
-          </Overlay>
-        ) */
-      }
-    }, {
-      key: "measureRowLimit",
-      value: function measureRowLimit() {
-        this.setState({
-          needLimitMeasure: false,
-          rowLimit: this.slotRowRef.current.getRowLimit()
-        });
-      }
-    }, {
-      key: "selectDates",
-      value: function selectDates(slotInfo) {
-        var slots = this._pendingSelection.slice();
-        this._pendingSelection = [];
-        slots.sort(function (a, b) {
-          return +a - +b;
-        });
-        var start = new Date(slots[0]);
-        var end = new Date(slots[slots.length - 1]);
-        end.setDate(slots[slots.length - 1].getDate() + 1);
-        notify(this.props.onSelectSlot, {
-          slots: slots,
-          start: start,
-          end: end,
-          action: slotInfo.action,
-          bounds: slotInfo.bounds,
-          box: slotInfo.box
-        });
-      }
-    }, {
-      key: "clearSelection",
-      value: function clearSelection() {
-        clearTimeout(this._selectTimer);
-        this._pendingSelection = [];
-      }
-    }], [{
-      key: "getDerivedStateFromProps",
-      value: function getDerivedStateFromProps(_ref2, state) {
-        var date = _ref2.date,
-          localizer = _ref2.localizer;
-        return {
-          date: date,
-          needLimitMeasure: localizer.neq(date, state.date, 'month')
-        };
-      }
-    }]);
-    return MonthView;
-  }(React.Component);
-  MonthView.range = function (date, _ref3) {
-    var localizer = _ref3.localizer;
-    var start = localizer.firstVisibleDay(date, localizer);
-    var end = localizer.lastVisibleDay(date, localizer);
-    return {
-      start: start,
-      end: end
-    };
-  };
-  MonthView.navigate = function (date, action, _ref4) {
-    var localizer = _ref4.localizer;
-    switch (action) {
-      case navigate.PREVIOUS:
-        return localizer.add(date, -1, 'month');
-      case navigate.NEXT:
-        return localizer.add(date, 1, 'month');
-      default:
-        return date;
-    }
-  };
-  MonthView.title = function (date, _ref5) {
-    var localizer = _ref5.localizer;
-    return localizer.format(date, 'monthHeaderFormat');
-  };
-
-  var getKey = function getKey(_ref) {
-    var min = _ref.min,
-      max = _ref.max,
-      step = _ref.step,
-      slots = _ref.slots,
-      localizer = _ref.localizer;
-    return "".concat(+localizer.startOf(min, 'minutes')) + "".concat(+localizer.startOf(max, 'minutes')) + "".concat(step, "-").concat(slots);
-  };
-  function getSlotMetrics(_ref2) {
-    var start = _ref2.min,
-      end = _ref2.max,
-      step = _ref2.step,
-      timeslots = _ref2.timeslots,
-      localizer = _ref2.localizer;
-    var key = getKey({
-      start: start,
-      end: end,
-      step: step,
-      timeslots: timeslots,
-      localizer: localizer
-    });
-
-    // DST differences are handled inside the localizer
-    var totalMin = 1 + localizer.getTotalMin(start, end);
-    var minutesFromMidnight = localizer.getMinutesFromMidnight(start);
-    var numGroups = Math.ceil((totalMin - 1) / (step * timeslots));
-    var numSlots = numGroups * timeslots;
-    var groups = new Array(numGroups);
-    var slots = new Array(numSlots);
-    // Each slot date is created from "zero", instead of adding `step` to
-    // the previous one, in order to avoid DST oddities
-    for (var grp = 0; grp < numGroups; grp++) {
-      groups[grp] = new Array(timeslots);
-      for (var slot = 0; slot < timeslots; slot++) {
-        var slotIdx = grp * timeslots + slot;
-        var minFromStart = slotIdx * step;
-        // A date with total minutes calculated from the start of the day
-        slots[slotIdx] = groups[grp][slot] = localizer.getSlotDate(start, minutesFromMidnight, minFromStart);
-      }
-    }
-
-    // Necessary to be able to select up until the last timeslot in a day
-    var lastSlotMinFromStart = slots.length * step;
-    slots.push(localizer.getSlotDate(start, minutesFromMidnight, lastSlotMinFromStart));
-    function positionFromDate(date) {
-      var diff = localizer.diff(start, date, 'minutes') + localizer.getDstOffset(start, date);
-      return Math.min(diff, totalMin);
-    }
-    return {
-      groups: groups,
-      update: function update(args) {
-        if (getKey(args) !== key) return getSlotMetrics(args);
-        return this;
-      },
-      dateIsInGroup: function dateIsInGroup(date, groupIndex) {
-        var nextGroup = groups[groupIndex + 1];
-        return localizer.inRange(date, groups[groupIndex][0], nextGroup ? nextGroup[0] : end, 'minutes');
-      },
-      nextSlot: function nextSlot(slot) {
-        var next = slots[Math.min(slots.indexOf(slot) + 1, slots.length - 1)];
-        // in the case of the last slot we won't a long enough range so manually get it
-        if (next === slot) next = localizer.add(slot, step, 'minutes');
-        return next;
-      },
-      closestSlotToPosition: function closestSlotToPosition(percent) {
-        var slot = Math.min(slots.length - 1, Math.max(0, Math.floor(percent * numSlots)));
-        return slots[slot];
-      },
-      closestSlotFromPoint: function closestSlotFromPoint(point, boundaryRect) {
-        var range = Math.abs(boundaryRect.top - boundaryRect.bottom);
-        return this.closestSlotToPosition((point.y - boundaryRect.top) / range);
-      },
-      closestSlotFromDate: function closestSlotFromDate(date) {
-        var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
-        if (localizer.lt(date, start, 'minutes')) return slots[0];
-        if (localizer.gt(date, end, 'minutes')) return slots[slots.length - 1];
-        var diffMins = localizer.diff(start, date, 'minutes');
-        return slots[(diffMins - diffMins % step) / step + offset];
-      },
-      startsBeforeDay: function startsBeforeDay(date) {
-        return localizer.lt(date, start, 'day');
-      },
-      startsAfterDay: function startsAfterDay(date) {
-        return localizer.gt(date, end, 'day');
-      },
-      startsBefore: function startsBefore(date) {
-        return localizer.lt(localizer.merge(start, date), start, 'minutes');
-      },
-      startsAfter: function startsAfter(date) {
-        return localizer.gt(localizer.merge(end, date), end, 'minutes');
-      },
-      getRange: function getRange(rangeStart, rangeEnd, ignoreMin, ignoreMax) {
-        if (!ignoreMin) rangeStart = localizer.min(end, localizer.max(start, rangeStart));
-        if (!ignoreMax) rangeEnd = localizer.min(end, localizer.max(start, rangeEnd));
-        var rangeStartMin = positionFromDate(rangeStart);
-        var rangeEndMin = positionFromDate(rangeEnd);
-        var top = rangeEndMin > step * numSlots && !localizer.eq(end, rangeEnd) ? (rangeStartMin - step) / (step * numSlots) * 100 : rangeStartMin / (step * numSlots) * 100;
-        return {
-          top: top,
-          height: rangeEndMin / (step * numSlots) * 100 - top,
-          start: positionFromDate(rangeStart),
-          startDate: rangeStart,
-          end: positionFromDate(rangeEnd),
-          endDate: rangeEnd
-        };
-      },
-      getCurrentTimePosition: function getCurrentTimePosition(rangeStart) {
-        var rangeStartMin = positionFromDate(rangeStart);
-        var top = rangeStartMin / (step * numSlots) * 100;
-        return top;
-      }
-    };
-  }
-
-  var Symbol$2 = _Symbol,
-      isArguments = isArguments_1,
-      isArray$3 = isArray_1;
-
-  /** Built-in value references. */
-  var spreadableSymbol = Symbol$2 ? Symbol$2.isConcatSpreadable : undefined;
-
-  /**
-   * Checks if `value` is a flattenable `arguments` object or array.
-   *
-   * @private
-   * @param {*} value The value to check.
-   * @returns {boolean} Returns `true` if `value` is flattenable, else `false`.
-   */
-  function isFlattenable$1(value) {
-    return isArray$3(value) || isArguments(value) ||
-      !!(spreadableSymbol && value && value[spreadableSymbol]);
-  }
-
-  var _isFlattenable = isFlattenable$1;
-
-  var arrayPush$1 = _arrayPush,
-      isFlattenable = _isFlattenable;
-
-  /**
-   * The base implementation of `_.flatten` with support for restricting flattening.
-   *
-   * @private
-   * @param {Array} array The array to flatten.
-   * @param {number} depth The maximum recursion depth.
-   * @param {boolean} [predicate=isFlattenable] The function invoked per iteration.
-   * @param {boolean} [isStrict] Restrict to values that pass `predicate` checks.
-   * @param {Array} [result=[]] The initial result value.
-   * @returns {Array} Returns the new flattened array.
-   */
-  function baseFlatten$2(array, depth, predicate, isStrict, result) {
-    var index = -1,
-        length = array.length;
-
-    predicate || (predicate = isFlattenable);
-    result || (result = []);
-
-    while (++index < length) {
-      var value = array[index];
-      if (depth > 0 && predicate(value)) {
-        if (depth > 1) {
-          // Recursively flatten arrays (susceptible to call stack limits).
-          baseFlatten$2(value, depth - 1, predicate, isStrict, result);
-        } else {
-          arrayPush$1(result, value);
-        }
-      } else if (!isStrict) {
-        result[result.length] = value;
-      }
-    }
-    return result;
-  }
-
-  var _baseFlatten = baseFlatten$2;
-
-  /**
-   * Creates a base function for methods like `_.forIn` and `_.forOwn`.
-   *
-   * @private
-   * @param {boolean} [fromRight] Specify iterating from right to left.
-   * @returns {Function} Returns the new base function.
-   */
-
-  function createBaseFor$1(fromRight) {
-    return function(object, iteratee, keysFunc) {
-      var index = -1,
-          iterable = Object(object),
-          props = keysFunc(object),
-          length = props.length;
-
-      while (length--) {
-        var key = props[fromRight ? length : ++index];
-        if (iteratee(iterable[key], key, iterable) === false) {
-          break;
-        }
-      }
-      return object;
-    };
-  }
-
-  var _createBaseFor = createBaseFor$1;
-
-  var createBaseFor = _createBaseFor;
-
-  /**
-   * The base implementation of `baseForOwn` which iterates over `object`
-   * properties returned by `keysFunc` and invokes `iteratee` for each property.
-   * Iteratee functions may exit iteration early by explicitly returning `false`.
-   *
-   * @private
-   * @param {Object} object The object to iterate over.
-   * @param {Function} iteratee The function invoked per iteration.
-   * @param {Function} keysFunc The function to get the keys of `object`.
-   * @returns {Object} Returns `object`.
-   */
-  var baseFor$1 = createBaseFor();
-
-  var _baseFor = baseFor$1;
-
-  var baseFor = _baseFor,
-      keys$2 = keys_1;
-
-  /**
-   * The base implementation of `_.forOwn` without support for iteratee shorthands.
-   *
-   * @private
-   * @param {Object} object The object to iterate over.
-   * @param {Function} iteratee The function invoked per iteration.
-   * @returns {Object} Returns `object`.
-   */
-  function baseForOwn$3(object, iteratee) {
-    return object && baseFor(object, iteratee, keys$2);
-  }
-
-  var _baseForOwn = baseForOwn$3;
-
-  var isArrayLike$2 = isArrayLike_1;
-
-  /**
-   * Creates a `baseEach` or `baseEachRight` function.
-   *
-   * @private
-   * @param {Function} eachFunc The function to iterate over a collection.
-   * @param {boolean} [fromRight] Specify iterating from right to left.
-   * @returns {Function} Returns the new base function.
-   */
-  function createBaseEach$1(eachFunc, fromRight) {
-    return function(collection, iteratee) {
-      if (collection == null) {
-        return collection;
-      }
-      if (!isArrayLike$2(collection)) {
-        return eachFunc(collection, iteratee);
-      }
-      var length = collection.length,
-          index = fromRight ? length : -1,
-          iterable = Object(collection);
-
-      while ((fromRight ? index-- : ++index < length)) {
-        if (iteratee(iterable[index], index, iterable) === false) {
-          break;
-        }
-      }
-      return collection;
-    };
-  }
-
-  var _createBaseEach = createBaseEach$1;
-
-  var baseForOwn$2 = _baseForOwn,
-      createBaseEach = _createBaseEach;
-
-  /**
-   * The base implementation of `_.forEach` without support for iteratee shorthands.
-   *
-   * @private
-   * @param {Array|Object} collection The collection to iterate over.
-   * @param {Function} iteratee The function invoked per iteration.
-   * @returns {Array|Object} Returns `collection`.
-   */
-  var baseEach$1 = createBaseEach(baseForOwn$2);
-
-  var _baseEach = baseEach$1;
-
-  var baseEach = _baseEach,
-      isArrayLike$1 = isArrayLike_1;
-
-  /**
-   * The base implementation of `_.map` without support for iteratee shorthands.
-   *
-   * @private
-   * @param {Array|Object} collection The collection to iterate over.
-   * @param {Function} iteratee The function invoked per iteration.
-   * @returns {Array} Returns the new mapped array.
-   */
-  function baseMap$1(collection, iteratee) {
-    var index = -1,
-        result = isArrayLike$1(collection) ? Array(collection.length) : [];
-
-    baseEach(collection, function(value, key, collection) {
-      result[++index] = iteratee(value, key, collection);
-    });
-    return result;
-  }
-
-  var _baseMap = baseMap$1;
-
-  /**
-   * The base implementation of `_.sortBy` which uses `comparer` to define the
-   * sort order of `array` and replaces criteria objects with their corresponding
-   * values.
-   *
-   * @private
-   * @param {Array} array The array to sort.
-   * @param {Function} comparer The function to define sort order.
-   * @returns {Array} Returns `array`.
-   */
-
-  function baseSortBy$1(array, comparer) {
-    var length = array.length;
-
-    array.sort(comparer);
-    while (length--) {
-      array[length] = array[length].value;
-    }
-    return array;
-  }
-
-  var _baseSortBy = baseSortBy$1;
-
-  var isSymbol = isSymbol_1;
-
-  /**
-   * Compares values to sort them in ascending order.
-   *
-   * @private
-   * @param {*} value The value to compare.
-   * @param {*} other The other value to compare.
-   * @returns {number} Returns the sort order indicator for `value`.
-   */
-  function compareAscending$1(value, other) {
-    if (value !== other) {
-      var valIsDefined = value !== undefined,
-          valIsNull = value === null,
-          valIsReflexive = value === value,
-          valIsSymbol = isSymbol(value);
-
-      var othIsDefined = other !== undefined,
-          othIsNull = other === null,
-          othIsReflexive = other === other,
-          othIsSymbol = isSymbol(other);
-
-      if ((!othIsNull && !othIsSymbol && !valIsSymbol && value > other) ||
-          (valIsSymbol && othIsDefined && othIsReflexive && !othIsNull && !othIsSymbol) ||
-          (valIsNull && othIsDefined && othIsReflexive) ||
-          (!valIsDefined && othIsReflexive) ||
-          !valIsReflexive) {
-        return 1;
-      }
-      if ((!valIsNull && !valIsSymbol && !othIsSymbol && value < other) ||
-          (othIsSymbol && valIsDefined && valIsReflexive && !valIsNull && !valIsSymbol) ||
-          (othIsNull && valIsDefined && valIsReflexive) ||
-          (!othIsDefined && valIsReflexive) ||
-          !othIsReflexive) {
-        return -1;
-      }
-    }
-    return 0;
-  }
-
-  var _compareAscending = compareAscending$1;
-
-  var compareAscending = _compareAscending;
-
-  /**
-   * Used by `_.orderBy` to compare multiple properties of a value to another
-   * and stable sort them.
-   *
-   * If `orders` is unspecified, all values are sorted in ascending order. Otherwise,
-   * specify an order of "desc" for descending or "asc" for ascending sort order
-   * of corresponding values.
-   *
-   * @private
-   * @param {Object} object The object to compare.
-   * @param {Object} other The other object to compare.
-   * @param {boolean[]|string[]} orders The order to sort by for each property.
-   * @returns {number} Returns the sort order indicator for `object`.
-   */
-  function compareMultiple$1(object, other, orders) {
-    var index = -1,
-        objCriteria = object.criteria,
-        othCriteria = other.criteria,
-        length = objCriteria.length,
-        ordersLength = orders.length;
-
-    while (++index < length) {
-      var result = compareAscending(objCriteria[index], othCriteria[index]);
-      if (result) {
-        if (index >= ordersLength) {
-          return result;
-        }
-        var order = orders[index];
-        return result * (order == 'desc' ? -1 : 1);
-      }
-    }
-    // Fixes an `Array#sort` bug in the JS engine embedded in Adobe applications
-    // that causes it, under certain circumstances, to provide the same value for
-    // `object` and `other`. See https://github.com/jashkenas/underscore/pull/1247
-    // for more details.
-    //
-    // This also ensures a stable sort in V8 and other engines.
-    // See https://bugs.chromium.org/p/v8/issues/detail?id=90 for more details.
-    return object.index - other.index;
-  }
-
-  var _compareMultiple = compareMultiple$1;
-
-  var arrayMap$1 = _arrayMap,
-      baseGet$1 = _baseGet,
-      baseIteratee$2 = _baseIteratee,
-      baseMap = _baseMap,
-      baseSortBy = _baseSortBy,
-      baseUnary$2 = _baseUnary,
-      compareMultiple = _compareMultiple,
-      identity$2 = identity_1,
-      isArray$2 = isArray_1;
-
-  /**
-   * The base implementation of `_.orderBy` without param guards.
-   *
-   * @private
-   * @param {Array|Object} collection The collection to iterate over.
-   * @param {Function[]|Object[]|string[]} iteratees The iteratees to sort by.
-   * @param {string[]} orders The sort orders of `iteratees`.
-   * @returns {Array} Returns the new sorted array.
-   */
-  function baseOrderBy$1(collection, iteratees, orders) {
-    if (iteratees.length) {
-      iteratees = arrayMap$1(iteratees, function(iteratee) {
-        if (isArray$2(iteratee)) {
-          return function(value) {
-            return baseGet$1(value, iteratee.length === 1 ? iteratee[0] : iteratee);
-          }
-        }
-        return iteratee;
-      });
-    } else {
-      iteratees = [identity$2];
-    }
-
-    var index = -1;
-    iteratees = arrayMap$1(iteratees, baseUnary$2(baseIteratee$2));
-
-    var result = baseMap(collection, function(value, key, collection) {
-      var criteria = arrayMap$1(iteratees, function(iteratee) {
-        return iteratee(value);
-      });
-      return { 'criteria': criteria, 'index': ++index, 'value': value };
-    });
-
-    return baseSortBy(result, function(object, other) {
-      return compareMultiple(object, other, orders);
-    });
-  }
-
-  var _baseOrderBy = baseOrderBy$1;
-
-  /**
-   * A faster alternative to `Function#apply`, this function invokes `func`
-   * with the `this` binding of `thisArg` and the arguments of `args`.
-   *
-   * @private
-   * @param {Function} func The function to invoke.
-   * @param {*} thisArg The `this` binding of `func`.
-   * @param {Array} args The arguments to invoke `func` with.
-   * @returns {*} Returns the result of `func`.
-   */
-
-  function apply$1(func, thisArg, args) {
-    switch (args.length) {
-      case 0: return func.call(thisArg);
-      case 1: return func.call(thisArg, args[0]);
-      case 2: return func.call(thisArg, args[0], args[1]);
-      case 3: return func.call(thisArg, args[0], args[1], args[2]);
-    }
-    return func.apply(thisArg, args);
-  }
-
-  var _apply = apply$1;
-
-  var apply = _apply;
-
-  /* Built-in method references for those with the same name as other `lodash` methods. */
-  var nativeMax = Math.max;
-
-  /**
-   * A specialized version of `baseRest` which transforms the rest array.
-   *
-   * @private
-   * @param {Function} func The function to apply a rest parameter to.
-   * @param {number} [start=func.length-1] The start position of the rest parameter.
-   * @param {Function} transform The rest array transform.
-   * @returns {Function} Returns the new function.
-   */
-  function overRest$2(func, start, transform) {
-    start = nativeMax(start === undefined ? (func.length - 1) : start, 0);
-    return function() {
-      var args = arguments,
-          index = -1,
-          length = nativeMax(args.length - start, 0),
-          array = Array(length);
-
-      while (++index < length) {
-        array[index] = args[start + index];
-      }
-      index = -1;
-      var otherArgs = Array(start + 1);
-      while (++index < start) {
-        otherArgs[index] = args[index];
-      }
-      otherArgs[start] = transform(array);
-      return apply(func, this, otherArgs);
-    };
-  }
-
-  var _overRest = overRest$2;
-
-  /**
-   * Creates a function that returns `value`.
-   *
-   * @static
-   * @memberOf _
-   * @since 2.4.0
-   * @category Util
-   * @param {*} value The value to return from the new function.
-   * @returns {Function} Returns the new constant function.
-   * @example
-   *
-   * var objects = _.times(2, _.constant({ 'a': 1 }));
-   *
-   * console.log(objects);
-   * // => [{ 'a': 1 }, { 'a': 1 }]
-   *
-   * console.log(objects[0] === objects[1]);
-   * // => true
-   */
-
-  function constant$1(value) {
-    return function() {
-      return value;
-    };
-  }
-
-  var constant_1 = constant$1;
-
-  var getNative = _getNative;
-
-  var defineProperty$2 = (function() {
-    try {
-      var func = getNative(Object, 'defineProperty');
-      func({}, '', {});
-      return func;
-    } catch (e) {}
-  }());
-
-  var _defineProperty = defineProperty$2;
-
-  var constant = constant_1,
-      defineProperty$1 = _defineProperty,
-      identity$1 = identity_1;
-
-  /**
-   * The base implementation of `setToString` without support for hot loop shorting.
-   *
-   * @private
-   * @param {Function} func The function to modify.
-   * @param {Function} string The `toString` result.
-   * @returns {Function} Returns `func`.
-   */
-  var baseSetToString$1 = !defineProperty$1 ? identity$1 : function(func, string) {
-    return defineProperty$1(func, 'toString', {
-      'configurable': true,
-      'enumerable': false,
-      'value': constant(string),
-      'writable': true
-    });
-  };
-
-  var _baseSetToString = baseSetToString$1;
-
-  /** Used to detect hot functions by number of calls within a span of milliseconds. */
-
-  var HOT_COUNT = 800,
-      HOT_SPAN = 16;
-
-  /* Built-in method references for those with the same name as other `lodash` methods. */
-  var nativeNow = Date.now;
-
-  /**
-   * Creates a function that'll short out and invoke `identity` instead
-   * of `func` when it's called `HOT_COUNT` or more times in `HOT_SPAN`
-   * milliseconds.
-   *
-   * @private
-   * @param {Function} func The function to restrict.
-   * @returns {Function} Returns the new shortable function.
-   */
-  function shortOut$1(func) {
-    var count = 0,
-        lastCalled = 0;
-
-    return function() {
-      var stamp = nativeNow(),
-          remaining = HOT_SPAN - (stamp - lastCalled);
-
-      lastCalled = stamp;
-      if (remaining > 0) {
-        if (++count >= HOT_COUNT) {
-          return arguments[0];
-        }
-      } else {
-        count = 0;
-      }
-      return func.apply(undefined, arguments);
-    };
-  }
-
-  var _shortOut = shortOut$1;
-
-  var baseSetToString = _baseSetToString,
-      shortOut = _shortOut;
-
-  /**
-   * Sets the `toString` method of `func` to return `string`.
-   *
-   * @private
-   * @param {Function} func The function to modify.
-   * @param {Function} string The `toString` result.
-   * @returns {Function} Returns `func`.
-   */
-  var setToString$2 = shortOut(baseSetToString);
-
-  var _setToString = setToString$2;
-
-  var identity = identity_1,
-      overRest$1 = _overRest,
-      setToString$1 = _setToString;
-
-  /**
-   * The base implementation of `_.rest` which doesn't validate or coerce arguments.
-   *
-   * @private
-   * @param {Function} func The function to apply a rest parameter to.
-   * @param {number} [start=func.length-1] The start position of the rest parameter.
-   * @returns {Function} Returns the new function.
-   */
-  function baseRest$2(func, start) {
-    return setToString$1(overRest$1(func, start, identity), func + '');
-  }
-
-  var _baseRest = baseRest$2;
-
-  var baseFlatten$1 = _baseFlatten,
-      baseOrderBy = _baseOrderBy,
-      baseRest$1 = _baseRest,
-      isIterateeCall$1 = _isIterateeCall;
-
-  /**
-   * Creates an array of elements, sorted in ascending order by the results of
-   * running each element in a collection thru each iteratee. This method
-   * performs a stable sort, that is, it preserves the original sort order of
-   * equal elements. The iteratees are invoked with one argument: (value).
-   *
-   * @static
-   * @memberOf _
-   * @since 0.1.0
-   * @category Collection
-   * @param {Array|Object} collection The collection to iterate over.
-   * @param {...(Function|Function[])} [iteratees=[_.identity]]
-   *  The iteratees to sort by.
-   * @returns {Array} Returns the new sorted array.
-   * @example
-   *
-   * var users = [
-   *   { 'user': 'fred',   'age': 48 },
-   *   { 'user': 'barney', 'age': 36 },
-   *   { 'user': 'fred',   'age': 30 },
-   *   { 'user': 'barney', 'age': 34 }
-   * ];
-   *
-   * _.sortBy(users, [function(o) { return o.user; }]);
-   * // => objects for [['barney', 36], ['barney', 34], ['fred', 48], ['fred', 30]]
-   *
-   * _.sortBy(users, ['user', 'age']);
-   * // => objects for [['barney', 34], ['barney', 36], ['fred', 30], ['fred', 48]]
-   */
-  var sortBy = baseRest$1(function(collection, iteratees) {
-    if (collection == null) {
-      return [];
-    }
-    var length = iteratees.length;
-    if (length > 1 && isIterateeCall$1(collection, iteratees[0], iteratees[1])) {
-      iteratees = [];
-    } else if (length > 2 && isIterateeCall$1(iteratees[0], iteratees[1], iteratees[2])) {
-      iteratees = [iteratees[0]];
-    }
-    return baseOrderBy(collection, baseFlatten$1(iteratees, 1), []);
-  });
-
-  var sortBy_1 = sortBy;
-
-  var Event$1 = /*#__PURE__*/function () {
-    function Event(data, _ref) {
-      var accessors = _ref.accessors,
-        slotMetrics = _ref.slotMetrics;
-      _classCallCheck(this, Event);
-      var _slotMetrics$getRange = slotMetrics.getRange(accessors.start(data), accessors.end(data)),
-        start = _slotMetrics$getRange.start,
-        startDate = _slotMetrics$getRange.startDate,
-        end = _slotMetrics$getRange.end,
-        endDate = _slotMetrics$getRange.endDate,
-        top = _slotMetrics$getRange.top,
-        height = _slotMetrics$getRange.height;
-      this.start = start;
-      this.end = end;
-      this.startMs = +startDate;
-      this.endMs = +endDate;
-      this.top = top;
-      this.height = height;
-      this.data = data;
-    }
-
-    /**
-     * The event's width without any overlap.
-     */
-    _createClass(Event, [{
-      key: "_width",
-      get: function get() {
-        // The container event's width is determined by the maximum number of
-        // events in any of its rows.
-        if (this.rows) {
-          var columns = this.rows.reduce(function (max, row) {
-            return Math.max(max, row.leaves.length + 1);
-          },
-          // add itself
-          0) + 1; // add the container
-
-          return 100 / columns;
-        }
-
-        // The row event's width is the space left by the container, divided
-        // among itself and its leaves.
-        if (this.leaves) {
-          var availableWidth = 100 - this.container._width;
-          return availableWidth / (this.leaves.length + 1);
-        }
-
-        // The leaf event's width is determined by its row's width
-        return this.row._width;
-      }
-
-      /**
-       * The event's calculated width, possibly with extra width added for
-       * overlapping effect.
-       */
-    }, {
-      key: "width",
-      get: function get() {
-        var noOverlap = this._width;
-        var overlap = Math.min(100, this._width * 1.7);
-
-        // Containers can always grow.
-        if (this.rows) {
-          return overlap;
-        }
-
-        // Rows can grow if they have leaves.
-        if (this.leaves) {
-          return this.leaves.length > 0 ? overlap : noOverlap;
-        }
-
-        // Leaves can grow unless they're the last item in a row.
-        var leaves = this.row.leaves;
-        var index = leaves.indexOf(this);
-        return index === leaves.length - 1 ? noOverlap : overlap;
-      }
-    }, {
-      key: "xOffset",
-      get: function get() {
-        // Containers have no offset.
-        if (this.rows) return 0;
-
-        // Rows always start where their container ends.
-        if (this.leaves) return this.container._width;
-
-        // Leaves are spread out evenly on the space left by its row.
-        var _this$row = this.row,
-          leaves = _this$row.leaves,
-          xOffset = _this$row.xOffset,
-          _width = _this$row._width;
-        var index = leaves.indexOf(this) + 1;
-        return xOffset + index * _width;
-      }
-    }]);
-    return Event;
-  }();
-  /**
-   * Return true if event a and b is considered to be on the same row.
-   */
-  function onSameRow(a, b, minimumStartDifference) {
-    return (
-      // Occupies the same start slot.
-      Math.abs(b.start - a.start) < minimumStartDifference ||
-      // A's start slot overlaps with b's end slot.
-      b.start > a.start && b.start < a.end
-    );
-  }
-  function sortByRender(events) {
-    var sortedByTime = sortBy_1(events, ['startMs', function (e) {
-      return -e.endMs;
-    }]);
-    var sorted = [];
-    while (sortedByTime.length > 0) {
-      var event = sortedByTime.shift();
-      sorted.push(event);
-      for (var i = 0; i < sortedByTime.length; i++) {
-        var test = sortedByTime[i];
-
-        // Still inside this event, look for next.
-        if (event.endMs > test.startMs) continue;
-
-        // We've found the first event of the next event group.
-        // If that event is not right next to our current event, we have to
-        // move it here.
-        if (i > 0) {
-          var _event = sortedByTime.splice(i, 1)[0];
-          sorted.push(_event);
-        }
-
-        // We've already found the next event group, so stop looking.
-        break;
-      }
-    }
-    return sorted;
-  }
-  function getStyledEvents$1(_ref2) {
-    var events = _ref2.events,
-      minimumStartDifference = _ref2.minimumStartDifference,
-      slotMetrics = _ref2.slotMetrics,
-      accessors = _ref2.accessors;
-    // Create proxy events and order them so that we don't have
-    // to fiddle with z-indexes.
-    var proxies = events.map(function (event) {
-      return new Event$1(event, {
-        slotMetrics: slotMetrics,
-        accessors: accessors
-      });
-    });
-    var eventsInRenderOrder = sortByRender(proxies);
-
-    // Group overlapping events, while keeping order.
-    // Every event is always one of: container, row or leaf.
-    // Containers can contain rows, and rows can contain leaves.
-    var containerEvents = [];
-    var _loop = function _loop() {
-      var event = eventsInRenderOrder[i];
-
-      // Check if this event can go into a container event.
-      var container = containerEvents.find(function (c) {
-        return c.end > event.start || Math.abs(event.start - c.start) < minimumStartDifference;
-      });
-
-      // Couldn't find a container — that means this event is a container.
-      if (!container) {
-        event.rows = [];
-        containerEvents.push(event);
-        return 1; // continue
-      }
-
-      // Found a container for the event.
-      event.container = container;
-
-      // Check if the event can be placed in an existing row.
-      // Start looking from behind.
-      var row = null;
-      for (var j = container.rows.length - 1; !row && j >= 0; j--) {
-        if (onSameRow(container.rows[j], event, minimumStartDifference)) {
-          row = container.rows[j];
-        }
-      }
-      if (row) {
-        // Found a row, so add it.
-        row.leaves.push(event);
-        event.row = row;
-      } else {
-        // Couldn't find a row – that means this event is a row.
-        event.leaves = [];
-        container.rows.push(event);
-      }
-    };
-    for (var i = 0; i < eventsInRenderOrder.length; i++) {
-      if (_loop()) continue;
-    }
-
-    // Return the original events, along with their styles.
-    return eventsInRenderOrder.map(function (event) {
-      return {
-        event: event.data,
-        style: {
-          top: event.top,
-          height: event.height,
-          width: event.width,
-          xOffset: Math.max(0, event.xOffset)
-        }
-      };
-    });
-  }
-
-  function getMaxIdxDFS(node, maxIdx, visited) {
-    for (var i = 0; i < node.friends.length; ++i) {
-      if (visited.indexOf(node.friends[i]) > -1) continue;
-      maxIdx = maxIdx > node.friends[i].idx ? maxIdx : node.friends[i].idx;
-      // TODO : trace it by not object but kinda index or something for performance
-      visited.push(node.friends[i]);
-      var newIdx = getMaxIdxDFS(node.friends[i], maxIdx, visited);
-      maxIdx = maxIdx > newIdx ? maxIdx : newIdx;
-    }
-    return maxIdx;
-  }
-  function noOverlap (_ref) {
-    var events = _ref.events,
-      minimumStartDifference = _ref.minimumStartDifference,
-      slotMetrics = _ref.slotMetrics,
-      accessors = _ref.accessors;
-    var styledEvents = getStyledEvents$1({
-      events: events,
-      minimumStartDifference: minimumStartDifference,
-      slotMetrics: slotMetrics,
-      accessors: accessors
-    });
-    styledEvents.sort(function (a, b) {
-      a = a.style;
-      b = b.style;
-      if (a.top !== b.top) return a.top > b.top ? 1 : -1;else return a.top + a.height < b.top + b.height ? 1 : -1;
-    });
-    for (var i = 0; i < styledEvents.length; ++i) {
-      styledEvents[i].friends = [];
-      delete styledEvents[i].style.left;
-      delete styledEvents[i].style.left;
-      delete styledEvents[i].idx;
-      delete styledEvents[i].size;
-    }
-    for (var _i2 = 0; _i2 < styledEvents.length - 1; ++_i2) {
-      var se1 = styledEvents[_i2];
-      var y1 = se1.style.top;
-      var y2 = se1.style.top + se1.style.height;
-      for (var j = _i2 + 1; j < styledEvents.length; ++j) {
-        var se2 = styledEvents[j];
-        var y3 = se2.style.top;
-        var y4 = se2.style.top + se2.style.height;
-        if (y3 >= y1 && y4 <= y2 || y4 > y1 && y4 <= y2 || y3 >= y1 && y3 < y2) {
-          // TODO : hashmap would be effective for performance
-          se1.friends.push(se2);
-          se2.friends.push(se1);
-        }
-      }
-    }
-    for (var _i4 = 0; _i4 < styledEvents.length; ++_i4) {
-      var se = styledEvents[_i4];
-      var bitmap = [];
-      for (var _j2 = 0; _j2 < 100; ++_j2) bitmap.push(1); // 1 means available
-
-      for (var _j4 = 0; _j4 < se.friends.length; ++_j4) if (se.friends[_j4].idx !== undefined) bitmap[se.friends[_j4].idx] = 0; // 0 means reserved
-
-      se.idx = bitmap.indexOf(1);
-    }
-    for (var _i6 = 0; _i6 < styledEvents.length; ++_i6) {
-      var size = 0;
-      if (styledEvents[_i6].size) continue;
-      var allFriends = [];
-      var maxIdx = getMaxIdxDFS(styledEvents[_i6], 0, allFriends);
-      size = 100 / (maxIdx + 1);
-      styledEvents[_i6].size = size;
-      for (var _j6 = 0; _j6 < allFriends.length; ++_j6) allFriends[_j6].size = size;
-    }
-    for (var _i8 = 0; _i8 < styledEvents.length; ++_i8) {
-      var e = styledEvents[_i8];
-      e.style.left = e.idx * e.size;
-
-      // stretch to maximum
-      var _maxIdx = 0;
-      for (var _j8 = 0; _j8 < e.friends.length; ++_j8) {
-        var idx = e.friends[_j8].idx;
-        _maxIdx = _maxIdx > idx ? _maxIdx : idx;
-      }
-      if (_maxIdx <= e.idx) e.size = 100 - e.idx * e.size;
-
-      // padding between events
-      // for this feature, `width` is not percentage based unit anymore
-      // it will be used with calc()
-      var padding = e.idx === 0 ? 0 : 3;
-      e.style.width = "calc(".concat(e.size, "% - ").concat(padding, "px)");
-      e.style.height = "calc(".concat(e.style.height, "% - 2px)");
-      e.style.xOffset = "calc(".concat(e.style.left, "% + ").concat(padding, "px)");
-    }
-    return styledEvents;
-  }
-
-  /*eslint no-unused-vars: "off"*/
-
-  var DefaultAlgorithms = {
-    overlap: getStyledEvents$1,
-    'no-overlap': noOverlap
-  };
-  function isFunction$1(a) {
-    return !!(a && a.constructor && a.call && a.apply);
-  }
-
-  //
-  function getStyledEvents(_ref) {
-    _ref.events;
-      _ref.minimumStartDifference;
-      _ref.slotMetrics;
-      _ref.accessors;
-      var dayLayoutAlgorithm = _ref.dayLayoutAlgorithm;
-    var algorithm = dayLayoutAlgorithm;
-    if (dayLayoutAlgorithm in DefaultAlgorithms) algorithm = DefaultAlgorithms[dayLayoutAlgorithm];
-    if (!isFunction$1(algorithm)) {
-      // invalid algorithm
-      return [];
-    }
-    return algorithm.apply(this, arguments);
-  }
-
-  var TimeSlotGroup = /*#__PURE__*/function (_Component) {
-    _inherits(TimeSlotGroup, _Component);
-    var _super = _createSuper(TimeSlotGroup);
-    function TimeSlotGroup() {
-      _classCallCheck(this, TimeSlotGroup);
-      return _super.apply(this, arguments);
-    }
-    _createClass(TimeSlotGroup, [{
-      key: "render",
-      value: function render() {
-        var _this$props = this.props,
-          renderSlot = _this$props.renderSlot,
-          resource = _this$props.resource,
-          group = _this$props.group,
-          getters = _this$props.getters,
-          _this$props$component = _this$props.components,
-          _this$props$component2 = _this$props$component === void 0 ? {} : _this$props$component,
-          _this$props$component3 = _this$props$component2.timeSlotWrapper,
-          Wrapper = _this$props$component3 === void 0 ? NoopWrapper : _this$props$component3;
-        var groupProps = getters ? getters.slotGroupProp(group) : {};
-        return /*#__PURE__*/React.createElement("div", Object.assign({
-          className: "rbc-timeslot-group"
-        }, groupProps), group.map(function (value, idx) {
-          var slotProps = getters ? getters.slotProp(value, resource) : {};
-          return /*#__PURE__*/React.createElement(Wrapper, {
-            key: idx,
-            value: value,
-            resource: resource
-          }, /*#__PURE__*/React.createElement("div", Object.assign({}, slotProps, {
-            className: clsx('rbc-time-slot', slotProps.className)
-          }), renderSlot && renderSlot(value, idx)));
-        }));
-      }
-    }]);
-    return TimeSlotGroup;
-  }(reactExports.Component);
-  TimeSlotGroup.propTypes = "development" !== "production" ? {
-    renderSlot: propTypesExports.func,
-    group: propTypesExports.array.isRequired,
-    resource: propTypesExports.any,
-    components: propTypesExports.object,
-    getters: propTypesExports.object
-  } : {};
-
-  function stringifyPercent(v) {
-    return typeof v === 'string' ? v : v + '%';
-  }
-
-  /* eslint-disable react/prop-types */
-  function TimeGridEvent(props) {
-    var style = props.style,
-      className = props.className,
-      event = props.event,
-      accessors = props.accessors,
-      rtl = props.rtl,
-      selected = props.selected,
-      label = props.label,
-      continuesPrior = props.continuesPrior,
-      continuesAfter = props.continuesAfter,
-      getters = props.getters,
-      onClick = props.onClick,
-      onDoubleClick = props.onDoubleClick,
-      isBackgroundEvent = props.isBackgroundEvent,
-      onKeyPress = props.onKeyPress,
-      _props$components = props.components,
-      Event = _props$components.event,
-      EventWrapper = _props$components.eventWrapper;
-    var title = accessors.title(event);
-    var tooltip = accessors.tooltip(event);
-    var end = accessors.end(event);
-    var start = accessors.start(event);
-    var userProps = getters.eventProp(event, start, end, selected);
-    var height = style.height,
-      top = style.top,
-      width = style.width,
-      xOffset = style.xOffset;
-    var inner = [/*#__PURE__*/React.createElement("div", {
-      key: "1",
-      className: "rbc-event-label"
-    }, label), /*#__PURE__*/React.createElement("div", {
-      key: "2",
-      className: "rbc-event-content"
-    }, Event ? /*#__PURE__*/React.createElement(Event, {
-      event: event,
-      title: title
-    }) : title)];
-    var eventStyle = isBackgroundEvent ? _objectSpread2(_objectSpread2({}, userProps.style), {}, _defineProperty$1({
-      top: stringifyPercent(top),
-      height: stringifyPercent(height),
-      // Adding 10px to take events container right margin into account
-      width: "calc(".concat(width, " + 10px)")
-    }, rtl ? 'right' : 'left', stringifyPercent(Math.max(0, xOffset)))) : _objectSpread2(_objectSpread2({}, userProps.style), {}, _defineProperty$1({
-      top: stringifyPercent(top),
-      width: stringifyPercent(width),
-      height: stringifyPercent(height)
-    }, rtl ? 'right' : 'left', stringifyPercent(xOffset)));
-    return /*#__PURE__*/React.createElement(EventWrapper, Object.assign({
-      type: "time"
-    }, props), /*#__PURE__*/React.createElement("div", {
-      onClick: onClick,
-      onDoubleClick: onDoubleClick,
-      style: eventStyle,
-      onKeyPress: onKeyPress,
-      title: tooltip ? (typeof label === 'string' ? label + ': ' : '') + tooltip : undefined,
-      className: clsx(isBackgroundEvent ? 'rbc-background-event' : 'rbc-event', className, userProps.className, {
-        'rbc-selected': selected,
-        'rbc-event-continues-earlier': continuesPrior,
-        'rbc-event-continues-later': continuesAfter
-      })
-    }, inner));
-  }
-
-  var DayColumnWrapper = function DayColumnWrapper(_ref) {
-    var children = _ref.children,
-      className = _ref.className,
-      style = _ref.style,
-      innerRef = _ref.innerRef;
-    return /*#__PURE__*/React.createElement("div", {
-      className: className,
-      style: style,
-      ref: innerRef
-    }, children);
-  };
-  var DayColumnWrapper$1 = /*#__PURE__*/React.forwardRef(function (props, ref) {
-    return /*#__PURE__*/React.createElement(DayColumnWrapper, Object.assign({}, props, {
-      innerRef: ref
-    }));
-  });
-
   var _excluded$5 = ["dayProp"],
     _excluded2$1 = ["eventContainerWrapper"];
   var DayColumn = /*#__PURE__*/function (_React$Component) {
@@ -75753,7 +75751,7 @@ ${SUCCESS}
           });
         };
         var selectorClicksHandler = function selectorClicksHandler(box, actionType) {
-          if (!isEvent(_this.containerRef.current, box)) {
+          if (!isEvent$1(_this.containerRef.current, box)) {
             var _selectionState = selectionState(box),
               startDate = _selectionState.startDate,
               endDate = _selectionState.endDate;
@@ -75772,7 +75770,7 @@ ${SUCCESS}
         selector.on('selectStart', maybeSelect);
         selector.on('beforeSelect', function (box) {
           if (_this.props.selectable !== 'ignoreEvents') return;
-          return !isEvent(_this.containerRef.current, box);
+          return !isEvent$1(_this.containerRef.current, box);
         });
         selector.on('click', function (box) {
           return selectorClicksHandler(box, 'click');
@@ -76123,6 +76121,11 @@ ${SUCCESS}
     var label = _ref.label;
     return /*#__PURE__*/React.createElement(React.Fragment, null, label);
   };
+  ResourceHeader.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node,
+    index: propTypesExports.number,
+    resource: propTypesExports.object
+  } : {};
 
   var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
     _inherits(TimeGridHeader, _React$Component);

@@ -1,7 +1,6 @@
 import contains from 'dom-helpers/contains'
 import closest from 'dom-helpers/closest'
 import listen from 'dom-helpers/listen'
-import Sentry from './utils/sentry'
 
 function addEventListener(type, handler, target = document) {
   return listen(target, type, handler, { passive: false })
@@ -334,8 +333,10 @@ class Selection {
     const { pageX, pageY } = getEventCoordinates(e)
 
     this.selecting = false
+
     this._removeEndListener && this._removeEndListener()
     this._removeMoveListener && this._removeMoveListener()
+
     if (!this._initialEventData) return
 
     let inRoot = !this.container || contains(this.container(), e.target)
@@ -344,8 +345,14 @@ class Selection {
     let click = this.isClick(pageX, pageY)
 
     this._initialEventData = null
-    if (e.key === 'Escape' || !isWithinValidContainer) return this.emit('reset')
-    if (click && inRoot) return this._handleClickEvent(e)
+
+    if (e.key === 'Escape' || !isWithinValidContainer) {
+      return this.emit('reset')
+    }
+
+    if (click && inRoot) {
+      return this._handleClickEvent(e)
+    }
 
     // User drag-clicked in the Selectable area
     if (!click) return this.emit('select', bounds)
@@ -399,9 +406,11 @@ class Selection {
 
     // Prevent emitting selectStart event until mouse is moved.
     // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
-    if (this.isClick(pageX, pageY) && !old && !(w || h)) return
-    this.selecting = true
+    if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+      return
+    }
 
+    this.selecting = true
     this._selectRect = {
       top,
       left,
@@ -411,8 +420,12 @@ class Selection {
       bottom: top + h,
     }
 
-    if (!old) this.emit('selectStart', this._initialEventData)
+    if (!old) {
+      this.emit('selectStart', this._initialEventData)
+    }
+
     if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect)
+
     e.preventDefault()
   }
 

@@ -26,12 +26,12 @@ import qsa from 'dom-helpers/querySelectorAll';
 import contains from 'dom-helpers/contains';
 import closest from 'dom-helpers/closest';
 import listen from 'dom-helpers/listen';
-import * as Sentry from '@sentry/react';
 import findIndex from 'lodash-es/findIndex';
 import range$1 from 'lodash-es/range';
 import memoize from 'memoize-one';
 import _assertThisInitialized from '@babel/runtime/helpers/esm/assertThisInitialized';
 import sortBy from 'lodash-es/sortBy';
+import * as Sentry from '@sentry/react';
 import scrollbarSize from 'dom-helpers/scrollbarSize';
 import getWidth from 'dom-helpers/width';
 import _toArray from '@babel/runtime/helpers/esm/toArray';
@@ -738,12 +738,6 @@ PopOverlay.propTypes = {
   overlayDisplay: PropTypes.func
 };
 
-Sentry.init({
-  dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
-  integrations: [],
-  release: 'react-big-calendar'
-});
-
 function addEventListener(type, handler) {
   var target = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : document;
   return listen(target, type, handler, {
@@ -1057,8 +1051,12 @@ var Selection = /*#__PURE__*/function () {
       var bounds = this._selectRect;
       var click = this.isClick(pageX, pageY);
       this._initialEventData = null;
-      if (e.key === 'Escape' || !isWithinValidContainer) return this.emit('reset');
-      if (click && inRoot) return this._handleClickEvent(e);
+      if (e.key === 'Escape' || !isWithinValidContainer) {
+        return this.emit('reset');
+      }
+      if (click && inRoot) {
+        return this._handleClickEvent(e);
+      }
 
       // User drag-clicked in the Selectable area
       if (!click) return this.emit('select', bounds);
@@ -1115,7 +1113,9 @@ var Selection = /*#__PURE__*/function () {
 
       // Prevent emitting selectStart event until mouse is moved.
       // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
-      if (this.isClick(pageX, pageY) && !old && !(w || h)) return;
+      if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+        return;
+      }
       this.selecting = true;
       this._selectRect = {
         top: top,
@@ -1125,7 +1125,9 @@ var Selection = /*#__PURE__*/function () {
         right: left + w,
         bottom: top + h
       };
-      if (!old) this.emit('selectStart', this._initialEventData);
+      if (!old) {
+        this.emit('selectStart', this._initialEventData);
+      }
       if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
       e.preventDefault();
     }
@@ -2891,6 +2893,12 @@ var DayColumnWrapper$1 = /*#__PURE__*/React.forwardRef(function (props, ref) {
   return /*#__PURE__*/React.createElement(DayColumnWrapper, Object.assign({}, props, {
     innerRef: ref
   }));
+});
+
+Sentry.init({
+  dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
+  integrations: [],
+  release: 'react-big-calendar'
 });
 
 var _excluded$5 = ["dayProp"],
