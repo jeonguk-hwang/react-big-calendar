@@ -72345,7 +72345,9 @@ ${SUCCESS}
     dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
     integrations: [],
     release: 'react-big-calendar',
-    debug: true // 디버깅 활성화
+    beforeSend: function beforeSend(event) {
+      return event;
+    }
   });
 
   var BackgroundCells = /*#__PURE__*/function (_React$Component) {
@@ -74065,9 +74067,6 @@ ${SUCCESS}
       "aria-sort": "none"
     }, label);
   };
-  Header.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node
-  } : {};
 
   var DateHeader = function DateHeader(_ref) {
     var label = _ref.label,
@@ -76115,11 +76114,6 @@ ${SUCCESS}
     var label = _ref.label;
     return /*#__PURE__*/React.createElement(React.Fragment, null, label);
   };
-  ResourceHeader.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node,
-    index: propTypesExports.number,
-    resource: propTypesExports.object
-  } : {};
 
   var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
     _inherits(TimeGridHeader, _React$Component);

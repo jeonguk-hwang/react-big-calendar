@@ -1224,7 +1224,9 @@ Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar',
-  debug: true // 디버깅 활성화
+  beforeSend: function beforeSend(event) {
+    return event;
+  }
 });
 
 var BackgroundCells = /*#__PURE__*/function (_React$Component) {
@@ -1502,6 +1504,9 @@ var EventRow = /*#__PURE__*/function (_React$Component) {
   }]);
   return EventRow;
 }(React.Component);
+EventRow.propTypes = process.env.NODE_ENV !== "production" ? _objectSpread({
+  segments: PropTypes.array
+}, EventRowMixin.propTypes) : {};
 EventRow.defaultProps = _objectSpread({}, EventRowMixin.defaultProps);
 
 function endOfRange(_ref) {
@@ -1958,6 +1963,9 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
+Header.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node
+} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -1973,13 +1981,6 @@ var DateHeader = function DateHeader(_ref) {
     role: "cell"
   }, label);
 };
-DateHeader.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node,
-  date: PropTypes.instanceOf(Date),
-  drilldownView: PropTypes.string,
-  onDrillDown: PropTypes.func,
-  isOffRange: PropTypes.bool
-} : {};
 
 var _excluded$6 = ["date", "className"];
 var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
@@ -2831,13 +2832,6 @@ var TimeSlotGroup = /*#__PURE__*/function (_Component) {
   }]);
   return TimeSlotGroup;
 }(Component);
-TimeSlotGroup.propTypes = process.env.NODE_ENV !== "production" ? {
-  renderSlot: PropTypes.func,
-  group: PropTypes.array.isRequired,
-  resource: PropTypes.any,
-  components: PropTypes.object,
-  getters: PropTypes.object
-} : {};
 
 function stringifyPercent(v) {
   return typeof v === 'string' ? v : v + '%';

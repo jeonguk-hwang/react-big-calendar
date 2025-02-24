@@ -4,7 +4,6 @@ Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar',
-  debug: true, // 디버깅 활성화
   beforeSend(event) {
     return event;
   },
