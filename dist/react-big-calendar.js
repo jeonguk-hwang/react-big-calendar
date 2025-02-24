@@ -38363,21 +38363,32 @@
         this.selecting = false;
         this._removeEndListener && this._removeEndListener();
         this._removeMoveListener && this._removeMoveListener();
-        if (!this._initialEventData) return;
+        if (!this._initialEventData) {
+          console.log("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData));
+          Sentry.captureException(new Error("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData)));
+          return;
+        }
         var inRoot = !this.container || contains$1(this.container(), e.target);
         var isWithinValidContainer = this._isWithinValidContainer(e);
         var bounds = this._selectRect;
         var click = this.isClick(pageX, pageY);
         this._initialEventData = null;
         if (e.key === 'Escape' || !isWithinValidContainer) {
+          console.log("[SENTRY_EVENT] select - e: ".concat(e));
+          Sentry.captureException(new Error("[SENTRY_EVENT] select - e: ".concat(e)));
           return this.emit('reset');
         }
         if (click && inRoot) {
+          console.log("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}"));
+          Sentry.captureException(new Error("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}")));
           return this._handleClickEvent(e);
         }
 
         // User drag-clicked in the Selectable area
-        if (!click) return this.emit('select', bounds);
+        if (!click) {
+          console.log('✅ select 이벤트 발생');
+          return this.emit('select', bounds);
+        }
         return this.emit('reset');
       }
     }, {
@@ -38432,6 +38443,8 @@
         // Prevent emitting selectStart event until mouse is moved.
         // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
         if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+          console.log("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y));
+          Sentry.captureException(new Error("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y)));
           return;
         }
         this.selecting = true;
@@ -38444,9 +38457,14 @@
           bottom: top + h
         };
         if (!old) {
+          console.log("[SENTRY_EVENT] selecting - old: ".concat(old));
+          Sentry.captureException(new Error("[SENTRY_EVENT] selecting - old: ".concat(old)));
           this.emit('selectStart', this._initialEventData);
         }
-        if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
+        if (!this.isClick(pageX, pageY)) {
+          console.log('✅ selecting 이벤트 발생');
+          this.emit('selecting', this._selectRect);
+        }
         e.preventDefault();
       }
     }, {
@@ -72199,7 +72217,7 @@ ${SUCCESS}
     return createV6CompatibleWrapUseRoutes(origUseRoutes, '7');
   }
 
-  var Sentry = /*#__PURE__*/Object.freeze({
+  var Sentry$1 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     BrowserClient: BrowserClient,
     ErrorBoundary: ErrorBoundary,
@@ -72416,7 +72434,7 @@ ${SUCCESS}
         var node = this.containerRef.current;
         if (!node) {
           console.log('[SENTRY_EVENT] _selectable - node:', node);
-          Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
+          Sentry$1.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
         }
         var selector = this._selector = new Selection(this.props.container, {
           longPressThreshold: this.props.longPressThreshold
@@ -72443,12 +72461,6 @@ ${SUCCESS}
           });
         };
         selector.on('selecting', function (box) {
-          console.error('🚨 selecting 이벤트 실행됨 - box:', box);
-          setTimeout(function () {
-            console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box);
-          }, 50);
-          console.log('[SENTRY_EVENT] selecting - box:', box);
-          Sentry.captureException(new Error("[SENTRY_EVENT] selecting - box: ".concat(box)));
           var _this2$props2 = _this2.props,
             range = _this2$props2.range,
             rtl = _this2$props2.rtl;
@@ -72484,8 +72496,6 @@ ${SUCCESS}
           return selectorClicksHandler(point, 'doubleClick');
         });
         selector.on('select', function (bounds) {
-          console.log('[SENTRY_EVENT] select - bounds:', bounds);
-          Sentry.captureException(new Error("[SENTRY_EVENT] select - bounds: ".concat(bounds)));
           _this2._selectSlot(_objectSpread2(_objectSpread2({}, _this2.state), {}, {
             action: 'select',
             bounds: bounds
@@ -72512,8 +72522,6 @@ ${SUCCESS}
           action = _ref.action,
           bounds = _ref.bounds,
           box = _ref.box;
-        console.log('[SENTRY_EVENT] _selectSlot - startIdx:', startIdx, 'endIdx:', endIdx, 'action:', action);
-        Sentry.captureException(new Error("[SENTRY_EVENT] _selectSlot - startIdx: ".concat(startIdx, " endIdx: ").concat(endIdx, " action: ").concat(action)));
         if (endIdx !== -1 && startIdx !== -1) this.props.onSelectSlot && this.props.onSelectSlot({
           start: startIdx,
           end: endIdx,
@@ -72628,6 +72636,9 @@ ${SUCCESS}
     }]);
     return EventRow;
   }(React.Component);
+  EventRow.propTypes = "development" !== "production" ? _objectSpread2({
+    segments: propTypesExports.array
+  }, EventRowMixin.propTypes) : {};
   EventRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
 
   /**
@@ -74070,6 +74081,9 @@ ${SUCCESS}
       "aria-sort": "none"
     }, label);
   };
+  Header.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node
+  } : {};
 
   var DateHeader = function DateHeader(_ref) {
     var label = _ref.label,
@@ -76117,11 +76131,6 @@ ${SUCCESS}
     var label = _ref.label;
     return /*#__PURE__*/React.createElement(React.Fragment, null, label);
   };
-  ResourceHeader.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node,
-    index: propTypesExports.number,
-    resource: propTypesExports.object
-  } : {};
 
   var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
     _inherits(TimeGridHeader, _React$Component);

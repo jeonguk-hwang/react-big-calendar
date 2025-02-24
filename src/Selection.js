@@ -337,7 +337,12 @@ class Selection {
     this._removeEndListener && this._removeEndListener()
     this._removeMoveListener && this._removeMoveListener()
 
-    if (!this._initialEventData) return
+    if (!this._initialEventData) {
+      console.log(`[SENTRY_EVENT] select - this._initialEventData: ${this._initialEventData}`)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] select - this._initialEventData: ${this._initialEventData}`))
+
+      return
+    }
 
     let inRoot = !this.container || contains(this.container(), e.target)
     let isWithinValidContainer = this._isWithinValidContainer(e)
@@ -347,15 +352,25 @@ class Selection {
     this._initialEventData = null
 
     if (e.key === 'Escape' || !isWithinValidContainer) {
+      console.log(`[SENTRY_EVENT] select - e: ${e}`)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] select - e: ${e}`))
+
       return this.emit('reset')
     }
 
     if (click && inRoot) {
+      console.log(`[SENTRY_EVENT] select - pageX: ${pageX}, pageY: ${pageY}, this.container: ${this.container}, this.container(): ${this.container()}, e.target: ${e.target}}`)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] select - pageX: ${pageX}, pageY: ${pageY}, this.container: ${this.container}, this.container(): ${this.container()}, e.target: ${e.target}}`))
+
       return this._handleClickEvent(e)
     }
 
     // User drag-clicked in the Selectable area
-    if (!click) return this.emit('select', bounds)
+    if (!click) {
+      console.log('✅ select 이벤트 발생')
+
+      return this.emit('select', bounds)
+    }
 
     return this.emit('reset')
   }
@@ -407,6 +422,9 @@ class Selection {
     // Prevent emitting selectStart event until mouse is moved.
     // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
     if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+      console.log(`[SENTRY_EVENT] selecting - pageX: ${pageX}, pageY: ${pageY}, old: ${old}, x: ${x}, y: ${y}`)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] selecting - pageX: ${pageX}, pageY: ${pageY}, old: ${old}, x: ${x}, y: ${y}`))
+
       return
     }
 
@@ -421,10 +439,15 @@ class Selection {
     }
 
     if (!old) {
+      console.log(`[SENTRY_EVENT] selecting - old: ${old}`)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] selecting - old: ${old}`))
       this.emit('selectStart', this._initialEventData)
     }
 
-    if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect)
+    if (!this.isClick(pageX, pageY)) {
+      console.log('✅ selecting 이벤트 발생')
+      this.emit('selecting', this._selectRect)
+    }
 
     e.preventDefault()
   }

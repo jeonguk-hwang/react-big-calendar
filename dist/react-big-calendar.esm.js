@@ -26,7 +26,7 @@ import qsa from 'dom-helpers/querySelectorAll';
 import contains from 'dom-helpers/contains';
 import closest from 'dom-helpers/closest';
 import listen from 'dom-helpers/listen';
-import * as Sentry from '@sentry/react';
+import * as Sentry$1 from '@sentry/react';
 import findIndex from 'lodash-es/findIndex';
 import range$1 from 'lodash-es/range';
 import memoize from 'memoize-one';
@@ -1045,21 +1045,32 @@ var Selection = /*#__PURE__*/function () {
       this.selecting = false;
       this._removeEndListener && this._removeEndListener();
       this._removeMoveListener && this._removeMoveListener();
-      if (!this._initialEventData) return;
+      if (!this._initialEventData) {
+        console.log("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData));
+        Sentry.captureException(new Error("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData)));
+        return;
+      }
       var inRoot = !this.container || contains(this.container(), e.target);
       var isWithinValidContainer = this._isWithinValidContainer(e);
       var bounds = this._selectRect;
       var click = this.isClick(pageX, pageY);
       this._initialEventData = null;
       if (e.key === 'Escape' || !isWithinValidContainer) {
+        console.log("[SENTRY_EVENT] select - e: ".concat(e));
+        Sentry.captureException(new Error("[SENTRY_EVENT] select - e: ".concat(e)));
         return this.emit('reset');
       }
       if (click && inRoot) {
+        console.log("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}"));
+        Sentry.captureException(new Error("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}")));
         return this._handleClickEvent(e);
       }
 
       // User drag-clicked in the Selectable area
-      if (!click) return this.emit('select', bounds);
+      if (!click) {
+        console.log('✅ select 이벤트 발생');
+        return this.emit('select', bounds);
+      }
       return this.emit('reset');
     }
   }, {
@@ -1114,6 +1125,8 @@ var Selection = /*#__PURE__*/function () {
       // Prevent emitting selectStart event until mouse is moved.
       // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
       if (this.isClick(pageX, pageY) && !old && !(w || h)) {
+        console.log("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y));
+        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y)));
         return;
       }
       this.selecting = true;
@@ -1126,9 +1139,14 @@ var Selection = /*#__PURE__*/function () {
         bottom: top + h
       };
       if (!old) {
+        console.log("[SENTRY_EVENT] selecting - old: ".concat(old));
+        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - old: ".concat(old)));
         this.emit('selectStart', this._initialEventData);
       }
-      if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
+      if (!this.isClick(pageX, pageY)) {
+        console.log('✅ selecting 이벤트 발생');
+        this.emit('selecting', this._selectRect);
+      }
       e.preventDefault();
     }
   }, {
@@ -1220,7 +1238,7 @@ function pageOffset(dir) {
   if (dir === 'top') return window.pageYOffset || document.body.scrollTop || 0;
 }
 
-Sentry.init({
+Sentry$1.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
   release: 'react-big-calendar'
@@ -1295,7 +1313,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       var node = this.containerRef.current;
       if (!node) {
         console.log('[SENTRY_EVENT] _selectable - node:', node);
-        Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
+        Sentry$1.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
       }
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
@@ -1322,12 +1340,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         });
       };
       selector.on('selecting', function (box) {
-        console.error('🚨 selecting 이벤트 실행됨 - box:', box);
-        setTimeout(function () {
-          console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box);
-        }, 50);
-        console.log('[SENTRY_EVENT] selecting - box:', box);
-        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - box: ".concat(box)));
         var _this2$props2 = _this2.props,
           range = _this2$props2.range,
           rtl = _this2$props2.rtl;
@@ -1363,8 +1375,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         return selectorClicksHandler(point, 'doubleClick');
       });
       selector.on('select', function (bounds) {
-        console.log('[SENTRY_EVENT] select - bounds:', bounds);
-        Sentry.captureException(new Error("[SENTRY_EVENT] select - bounds: ".concat(bounds)));
         _this2._selectSlot(_objectSpread(_objectSpread({}, _this2.state), {}, {
           action: 'select',
           bounds: bounds
@@ -1391,8 +1401,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         action = _ref.action,
         bounds = _ref.bounds,
         box = _ref.box;
-      console.log('[SENTRY_EVENT] _selectSlot - startIdx:', startIdx, 'endIdx:', endIdx, 'action:', action);
-      Sentry.captureException(new Error("[SENTRY_EVENT] _selectSlot - startIdx: ".concat(startIdx, " endIdx: ").concat(endIdx, " action: ").concat(action)));
       if (endIdx !== -1 && startIdx !== -1) this.props.onSelectSlot && this.props.onSelectSlot({
         start: startIdx,
         end: endIdx,

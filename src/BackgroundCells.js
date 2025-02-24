@@ -105,15 +105,6 @@ class BackgroundCells extends React.Component {
     }
 
     selector.on('selecting', (box) => {
-      console.error('🚨 selecting 이벤트 실행됨 - box:', box)
-      
-      setTimeout(() => {
-        console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box)
-      }, 50)
-
-      console.log('[SENTRY_EVENT] selecting - box:', box)
-      Sentry.captureException(new Error(`[SENTRY_EVENT] selecting - box: ${box}`))
-
       let { range, rtl } = this.props
 
       let startIdx = -1
@@ -154,9 +145,6 @@ class BackgroundCells extends React.Component {
     )
 
     selector.on('select', (bounds) => {
-      console.log('[SENTRY_EVENT] select - bounds:', bounds)
-      Sentry.captureException(new Error(`[SENTRY_EVENT] select - bounds: ${bounds}`))
-
       this._selectSlot({ ...this.state, action: 'select', bounds })
       this._initial = {}
       this.setState({ selecting: false })
@@ -171,16 +159,6 @@ class BackgroundCells extends React.Component {
   }
 
   _selectSlot({ endIdx, startIdx, action, bounds, box }) {
-    console.log(
-      '[SENTRY_EVENT] _selectSlot - startIdx:',
-      startIdx,
-      'endIdx:',
-      endIdx,
-      'action:',
-      action
-    )
-    Sentry.captureException(new Error(`[SENTRY_EVENT] _selectSlot - startIdx: ${startIdx} endIdx: ${endIdx} action: ${action}`))
-
     if (endIdx !== -1 && startIdx !== -1)
       this.props.onSelectSlot &&
         this.props.onSelectSlot({
