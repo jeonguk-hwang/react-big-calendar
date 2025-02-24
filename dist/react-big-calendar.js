@@ -72414,11 +72414,14 @@ ${SUCCESS}
       value: function _selectable() {
         var _this2 = this;
         var node = this.containerRef.current;
-        console.log('[SENTRY_EVENT] _selectable - node exists:', !!node);
-        Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node exists: ".concat(!!node)));
+        if (!node) {
+          console.log('[SENTRY_EVENT] _selectable - node:', node);
+          Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
+        }
         var selector = this._selector = new Selection(this.props.container, {
           longPressThreshold: this.props.longPressThreshold
         });
+        console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector);
         var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
           if (!isEvent$1(node, point) && !isShowMore(node, point)) {
             var rowBox = getBoundsForNode(node);
@@ -72490,6 +72493,7 @@ ${SUCCESS}
           });
           notify(_this2.props.onSelectEnd, [_this2.state]);
         });
+        console.log('✅ _selectable 실행 완료, selector 상태:', this._selector);
       }
     }, {
       key: "_teardownSelectable",
@@ -72622,9 +72626,6 @@ ${SUCCESS}
     }]);
     return EventRow;
   }(React.Component);
-  EventRow.propTypes = "development" !== "production" ? _objectSpread2({
-    segments: propTypesExports.array
-  }, EventRowMixin.propTypes) : {};
   EventRow.defaultProps = _objectSpread2({}, EventRowMixin.defaultProps);
 
   /**
@@ -74085,6 +74086,13 @@ ${SUCCESS}
       role: "cell"
     }, label);
   };
+  DateHeader.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node,
+    date: propTypesExports.instanceOf(Date),
+    drilldownView: propTypesExports.string,
+    onDrillDown: propTypesExports.func,
+    isOffRange: propTypesExports.bool
+  } : {};
 
   var _excluded$6 = ["date", "className"];
   var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {

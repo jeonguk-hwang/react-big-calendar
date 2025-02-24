@@ -74,12 +74,16 @@ class BackgroundCells extends React.Component {
   _selectable() {
     let node = this.containerRef.current
 
-    console.log('[SENTRY_EVENT] _selectable - node exists:', !!node)
-    Sentry.captureException(new Error(`[SENTRY_EVENT] _selectable - node exists: ${!!node}`))
+    if (!node) {
+      console.log('[SENTRY_EVENT] _selectable - node:', node)
+      Sentry.captureException(new Error(`[SENTRY_EVENT] _selectable - node: ${node}`))
+    }
 
     let selector = (this._selector = new Selection(this.props.container, {
       longPressThreshold: this.props.longPressThreshold,
     }))
+
+    console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector)
 
     let selectorClicksHandler = (point, actionType) => {
       if (!isEvent(node, point) && !isShowMore(node, point)) {
@@ -154,6 +158,8 @@ class BackgroundCells extends React.Component {
       this.setState({ selecting: false })
       notify(this.props.onSelectEnd, [this.state])
     })
+
+    console.log('✅ _selectable 실행 완료, selector 상태:', this._selector)
   }
 
   _teardownSelectable() {

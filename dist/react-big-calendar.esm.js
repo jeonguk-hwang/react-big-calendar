@@ -1293,11 +1293,14 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
     value: function _selectable() {
       var _this2 = this;
       var node = this.containerRef.current;
-      console.log('[SENTRY_EVENT] _selectable - node exists:', !!node);
-      Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node exists: ".concat(!!node)));
+      if (!node) {
+        console.log('[SENTRY_EVENT] _selectable - node:', node);
+        Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
+      }
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
       });
+      console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector);
       var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
         if (!isEvent(node, point) && !isShowMore(node, point)) {
           var rowBox = getBoundsForNode(node);
@@ -1369,6 +1372,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         });
         notify(_this2.props.onSelectEnd, [_this2.state]);
       });
+      console.log('✅ _selectable 실행 완료, selector 상태:', this._selector);
     }
   }, {
     key: "_teardownSelectable",
@@ -1957,6 +1961,9 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
+Header.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node
+} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -3408,6 +3415,11 @@ var ResourceHeader = function ResourceHeader(_ref) {
   var label = _ref.label;
   return /*#__PURE__*/React.createElement(React.Fragment, null, label);
 };
+ResourceHeader.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node,
+  index: PropTypes.number,
+  resource: PropTypes.object
+} : {};
 
 var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
   _inherits(TimeGridHeader, _React$Component);
@@ -4464,14 +4476,6 @@ var Toolbar = /*#__PURE__*/function (_React$Component) {
   }]);
   return Toolbar;
 }(React.Component);
-Toolbar.propTypes = process.env.NODE_ENV !== "production" ? {
-  view: PropTypes.string.isRequired,
-  views: PropTypes.arrayOf(PropTypes.string).isRequired,
-  label: PropTypes.node.isRequired,
-  localizer: PropTypes.object,
-  onNavigate: PropTypes.func.isRequired,
-  onView: PropTypes.func.isRequired
-} : {};
 
 /**
  * Retrieve via an accessor-like property
