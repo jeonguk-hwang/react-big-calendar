@@ -1485,9 +1485,6 @@ var EventRow = /*#__PURE__*/function (_React$Component) {
   }]);
   return EventRow;
 }(React.Component);
-EventRow.propTypes = process.env.NODE_ENV !== "production" ? _objectSpread({
-  segments: PropTypes.array
-}, EventRowMixin.propTypes) : {};
 EventRow.defaultProps = _objectSpread({}, EventRowMixin.defaultProps);
 
 function endOfRange(_ref) {
@@ -1944,9 +1941,6 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
-Header.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node
-} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -3018,9 +3012,6 @@ var DayColumn = /*#__PURE__*/function (_React$Component) {
         }
         if (_this.state.start !== state.start || _this.state.end !== state.end || _this.state.selecting !== state.selecting) {
           _this.setState(state);
-        } else {
-          console.log("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting));
-          Sentry.captureException(new Error("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting)));
         }
       };
       var selectionState = function selectionState(point) {

@@ -74048,6 +74048,9 @@ ${SUCCESS}
       "aria-sort": "none"
     }, label);
   };
+  Header.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node
+  } : {};
 
   var DateHeader = function DateHeader(_ref) {
     var label = _ref.label,
@@ -74063,6 +74066,13 @@ ${SUCCESS}
       role: "cell"
     }, label);
   };
+  DateHeader.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node,
+    date: propTypesExports.instanceOf(Date),
+    drilldownView: propTypesExports.string,
+    onDrillDown: propTypesExports.func,
+    isOffRange: propTypesExports.bool
+  } : {};
 
   var _excluded$6 = ["date", "className"];
   var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
@@ -75722,9 +75732,6 @@ ${SUCCESS}
           }
           if (_this.state.start !== state.start || _this.state.end !== state.end || _this.state.selecting !== state.selecting) {
             _this.setState(state);
-          } else {
-            console.log("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting));
-            Sentry.captureException(new Error("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting)));
           }
         };
         var selectionState = function selectionState(point) {
@@ -76116,11 +76123,6 @@ ${SUCCESS}
     var label = _ref.label;
     return /*#__PURE__*/React.createElement(React.Fragment, null, label);
   };
-  ResourceHeader.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node,
-    index: propTypesExports.number,
-    resource: propTypesExports.object
-  } : {};
 
   var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
     _inherits(TimeGridHeader, _React$Component);

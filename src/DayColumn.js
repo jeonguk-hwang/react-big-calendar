@@ -291,9 +291,6 @@ class DayColumn extends React.Component {
         this.state.selecting !== state.selecting
       ) {
         this.setState(state)
-      } else {
-        console.log(`[react-big-calendar] DayColumn maybeSelect this.state.start: ${this.state.start}, state.start: ${state.start}, this.state.end: ${this.state.end}, state.end: ${state.end}, this.state.selecting: ${this.state.selecting}, state.selecting: ${state.selecting}`)
-        Sentry.captureException(new Error(`[react-big-calendar] DayColumn maybeSelect this.state.start: ${this.state.start}, state.start: ${state.start}, this.state.end: ${this.state.end}, state.end: ${state.end}, this.state.selecting: ${this.state.selecting}, state.selecting: ${state.selecting}`))
       }
     }
 
