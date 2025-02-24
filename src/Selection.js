@@ -1,6 +1,7 @@
 import contains from 'dom-helpers/contains'
 import closest from 'dom-helpers/closest'
 import listen from 'dom-helpers/listen'
+import Sentry from './utils/sentry'
 
 function addEventListener(type, handler, target = document) {
   return listen(target, type, handler, { passive: false })
@@ -333,6 +334,7 @@ class Selection {
     const { pageX, pageY } = getEventCoordinates(e)
 
     this.selecting = false
+    console.log('this.selecting = false', this.selecting)
 
     this._removeEndListener && this._removeEndListener()
     this._removeMoveListener && this._removeMoveListener()
@@ -366,11 +368,7 @@ class Selection {
     }
 
     // User drag-clicked in the Selectable area
-    if (!click) {
-      console.log('✅ select 이벤트 발생')
-
-      return this.emit('select', bounds)
-    }
+    if (!click) return this.emit('select', bounds)
 
     return this.emit('reset')
   }
@@ -429,6 +427,8 @@ class Selection {
     }
 
     this.selecting = true
+    console.log('this.selecting = true', this.selecting)
+
     this._selectRect = {
       top,
       left,
@@ -444,10 +444,7 @@ class Selection {
       this.emit('selectStart', this._initialEventData)
     }
 
-    if (!this.isClick(pageX, pageY)) {
-      console.log('✅ selecting 이벤트 발생')
-      this.emit('selecting', this._selectRect)
-    }
+    if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect)
 
     e.preventDefault()
   }

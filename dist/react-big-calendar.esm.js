@@ -26,7 +26,7 @@ import qsa from 'dom-helpers/querySelectorAll';
 import contains from 'dom-helpers/contains';
 import closest from 'dom-helpers/closest';
 import listen from 'dom-helpers/listen';
-import * as Sentry$1 from '@sentry/react';
+import * as Sentry from '@sentry/react';
 import findIndex from 'lodash-es/findIndex';
 import range$1 from 'lodash-es/range';
 import memoize from 'memoize-one';
@@ -738,6 +738,12 @@ PopOverlay.propTypes = {
   overlayDisplay: PropTypes.func
 };
 
+Sentry.init({
+  dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
+  integrations: [],
+  release: 'react-big-calendar'
+});
+
 function addEventListener(type, handler) {
   var target = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : document;
   return listen(target, type, handler, {
@@ -1043,6 +1049,7 @@ var Selection = /*#__PURE__*/function () {
         pageX = _getEventCoordinates4.pageX,
         pageY = _getEventCoordinates4.pageY;
       this.selecting = false;
+      console.log('this.selecting = false', this.selecting);
       this._removeEndListener && this._removeEndListener();
       this._removeMoveListener && this._removeMoveListener();
       if (!this._initialEventData) {
@@ -1067,10 +1074,7 @@ var Selection = /*#__PURE__*/function () {
       }
 
       // User drag-clicked in the Selectable area
-      if (!click) {
-        console.log('✅ select 이벤트 발생');
-        return this.emit('select', bounds);
-      }
+      if (!click) return this.emit('select', bounds);
       return this.emit('reset');
     }
   }, {
@@ -1130,6 +1134,7 @@ var Selection = /*#__PURE__*/function () {
         return;
       }
       this.selecting = true;
+      console.log('this.selecting = true', this.selecting);
       this._selectRect = {
         top: top,
         left: left,
@@ -1143,10 +1148,7 @@ var Selection = /*#__PURE__*/function () {
         Sentry.captureException(new Error("[SENTRY_EVENT] selecting - old: ".concat(old)));
         this.emit('selectStart', this._initialEventData);
       }
-      if (!this.isClick(pageX, pageY)) {
-        console.log('✅ selecting 이벤트 발생');
-        this.emit('selecting', this._selectRect);
-      }
+      if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
       e.preventDefault();
     }
   }, {
@@ -1238,12 +1240,6 @@ function pageOffset(dir) {
   if (dir === 'top') return window.pageYOffset || document.body.scrollTop || 0;
 }
 
-Sentry$1.init({
-  dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
-  integrations: [],
-  release: 'react-big-calendar'
-});
-
 var BackgroundCells = /*#__PURE__*/function (_React$Component) {
   _inherits(BackgroundCells, _React$Component);
   var _super = _createSuper(BackgroundCells);
@@ -1313,7 +1309,7 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       var node = this.containerRef.current;
       if (!node) {
         console.log('[SENTRY_EVENT] _selectable - node:', node);
-        Sentry$1.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
+        Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
       }
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
@@ -1986,13 +1982,6 @@ var DateHeader = function DateHeader(_ref) {
     role: "cell"
   }, label);
 };
-DateHeader.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node,
-  date: PropTypes.instanceOf(Date),
-  drilldownView: PropTypes.string,
-  onDrillDown: PropTypes.func,
-  isOffRange: PropTypes.bool
-} : {};
 
 var _excluded$6 = ["date", "className"];
 var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
