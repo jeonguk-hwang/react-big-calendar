@@ -72421,7 +72421,6 @@ ${SUCCESS}
         var selector = this._selector = new Selection(this.props.container, {
           longPressThreshold: this.props.longPressThreshold
         });
-        console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector);
         var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
           if (!isEvent$1(node, point) && !isShowMore(node, point)) {
             var rowBox = getBoundsForNode(node);
@@ -72444,6 +72443,10 @@ ${SUCCESS}
           });
         };
         selector.on('selecting', function (box) {
+          console.error('🚨 selecting 이벤트 실행됨 - box:', box);
+          setTimeout(function () {
+            console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box);
+          }, 50);
           console.log('[SENTRY_EVENT] selecting - box:', box);
           Sentry.captureException(new Error("[SENTRY_EVENT] selecting - box: ".concat(box)));
           var _this2$props2 = _this2.props,
@@ -72493,7 +72496,6 @@ ${SUCCESS}
           });
           notify(_this2.props.onSelectEnd, [_this2.state]);
         });
-        console.log('✅ _selectable 실행 완료, selector 상태:', this._selector);
       }
     }, {
       key: "_teardownSelectable",
@@ -74068,9 +74070,6 @@ ${SUCCESS}
       "aria-sort": "none"
     }, label);
   };
-  Header.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node
-  } : {};
 
   var DateHeader = function DateHeader(_ref) {
     var label = _ref.label,
@@ -74086,13 +74085,6 @@ ${SUCCESS}
       role: "cell"
     }, label);
   };
-  DateHeader.propTypes = "development" !== "production" ? {
-    label: propTypesExports.node,
-    date: propTypesExports.instanceOf(Date),
-    drilldownView: propTypesExports.string,
-    onDrillDown: propTypesExports.func,
-    isOffRange: propTypesExports.bool
-  } : {};
 
   var _excluded$6 = ["date", "className"];
   var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {
@@ -76125,6 +76117,11 @@ ${SUCCESS}
     var label = _ref.label;
     return /*#__PURE__*/React.createElement(React.Fragment, null, label);
   };
+  ResourceHeader.propTypes = "development" !== "production" ? {
+    label: propTypesExports.node,
+    index: propTypesExports.number,
+    resource: propTypesExports.object
+  } : {};
 
   var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
     _inherits(TimeGridHeader, _React$Component);

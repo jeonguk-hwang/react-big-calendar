@@ -1300,7 +1300,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
       });
-      console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector);
       var selectorClicksHandler = function selectorClicksHandler(point, actionType) {
         if (!isEvent(node, point) && !isShowMore(node, point)) {
           var rowBox = getBoundsForNode(node);
@@ -1323,6 +1322,10 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         });
       };
       selector.on('selecting', function (box) {
+        console.error('🚨 selecting 이벤트 실행됨 - box:', box);
+        setTimeout(function () {
+          console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box);
+        }, 50);
         console.log('[SENTRY_EVENT] selecting - box:', box);
         Sentry.captureException(new Error("[SENTRY_EVENT] selecting - box: ".concat(box)));
         var _this2$props2 = _this2.props,
@@ -1372,7 +1375,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
         });
         notify(_this2.props.onSelectEnd, [_this2.state]);
       });
-      console.log('✅ _selectable 실행 완료, selector 상태:', this._selector);
     }
   }, {
     key: "_teardownSelectable",
@@ -1961,9 +1963,6 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
-Header.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node
-} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -1979,6 +1978,13 @@ var DateHeader = function DateHeader(_ref) {
     role: "cell"
   }, label);
 };
+DateHeader.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node,
+  date: PropTypes.instanceOf(Date),
+  drilldownView: PropTypes.string,
+  onDrillDown: PropTypes.func,
+  isOffRange: PropTypes.bool
+} : {};
 
 var _excluded$6 = ["date", "className"];
 var eventsForWeek = function eventsForWeek(evts, start, end, accessors, localizer) {

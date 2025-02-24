@@ -83,8 +83,6 @@ class BackgroundCells extends React.Component {
       longPressThreshold: this.props.longPressThreshold,
     }))
 
-    console.log('✅ _selectable - Selection 인스턴스 생성됨:', this._selector)
-
     let selectorClicksHandler = (point, actionType) => {
       if (!isEvent(node, point) && !isShowMore(node, point)) {
         let rowBox = getBoundsForNode(node)
@@ -107,6 +105,12 @@ class BackgroundCells extends React.Component {
     }
 
     selector.on('selecting', (box) => {
+      console.error('🚨 selecting 이벤트 실행됨 - box:', box)
+      
+      setTimeout(() => {
+        console.log('✅ selecting 이벤트 실행됨 (setTimeout) - box:', box)
+      }, 50)
+
       console.log('[SENTRY_EVENT] selecting - box:', box)
       Sentry.captureException(new Error(`[SENTRY_EVENT] selecting - box: ${box}`))
 
@@ -158,8 +162,6 @@ class BackgroundCells extends React.Component {
       this.setState({ selecting: false })
       notify(this.props.onSelectEnd, [this.state])
     })
-
-    console.log('✅ _selectable 실행 완료, selector 상태:', this._selector)
   }
 
   _teardownSelectable() {
