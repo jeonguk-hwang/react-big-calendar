@@ -5,6 +5,7 @@ Sentry.init({
   integrations: [],
   release: 'react-big-calendar',
   debug: true, // 디버깅 활성화
+  sampleRate: 1.0, // 100% 전송
 })
 
 export default Sentry
