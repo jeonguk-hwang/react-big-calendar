@@ -1223,8 +1223,7 @@ function pageOffset(dir) {
 Sentry.init({
   dsn: 'https://318ae3c1b8e2747bcab8299c12ed1e57@o1398592.ingest.us.sentry.io/4508329798795264',
   integrations: [],
-  release: 'react-big-calendar',
-  sampleRate: 1.0 // 100% 전송
+  release: 'react-big-calendar'
 });
 
 var BackgroundCells = /*#__PURE__*/function (_React$Component) {
@@ -4465,6 +4464,14 @@ var Toolbar = /*#__PURE__*/function (_React$Component) {
   }]);
   return Toolbar;
 }(React.Component);
+Toolbar.propTypes = process.env.NODE_ENV !== "production" ? {
+  view: PropTypes.string.isRequired,
+  views: PropTypes.arrayOf(PropTypes.string).isRequired,
+  label: PropTypes.node.isRequired,
+  localizer: PropTypes.object,
+  onNavigate: PropTypes.func.isRequired,
+  onView: PropTypes.func.isRequired
+} : {};
 
 /**
  * Retrieve via an accessor-like property
