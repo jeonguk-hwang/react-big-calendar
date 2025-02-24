@@ -1049,29 +1049,16 @@ var Selection = /*#__PURE__*/function () {
         pageX = _getEventCoordinates4.pageX,
         pageY = _getEventCoordinates4.pageY;
       this.selecting = false;
-      console.log('this.selecting = false', this.selecting);
       this._removeEndListener && this._removeEndListener();
       this._removeMoveListener && this._removeMoveListener();
-      if (!this._initialEventData) {
-        console.log("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData));
-        Sentry.captureException(new Error("[SENTRY_EVENT] select - this._initialEventData: ".concat(this._initialEventData)));
-        return;
-      }
+      if (!this._initialEventData) return;
       var inRoot = !this.container || contains(this.container(), e.target);
       var isWithinValidContainer = this._isWithinValidContainer(e);
       var bounds = this._selectRect;
       var click = this.isClick(pageX, pageY);
       this._initialEventData = null;
-      if (e.key === 'Escape' || !isWithinValidContainer) {
-        console.log("[SENTRY_EVENT] select - e: ".concat(e));
-        Sentry.captureException(new Error("[SENTRY_EVENT] select - e: ".concat(e)));
-        return this.emit('reset');
-      }
-      if (click && inRoot) {
-        console.log("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}"));
-        Sentry.captureException(new Error("[SENTRY_EVENT] select - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", this.container: ").concat(this.container, ", this.container(): ").concat(this.container(), ", e.target: ").concat(e.target, "}")));
-        return this._handleClickEvent(e);
-      }
+      if (e.key === 'Escape' || !isWithinValidContainer) return this.emit('reset');
+      if (click && inRoot) return this._handleClickEvent(e);
 
       // User drag-clicked in the Selectable area
       if (!click) return this.emit('select', bounds);
@@ -1128,13 +1115,8 @@ var Selection = /*#__PURE__*/function () {
 
       // Prevent emitting selectStart event until mouse is moved.
       // in Chrome on Windows, mouseMove event may be fired just after mouseDown event.
-      if (this.isClick(pageX, pageY) && !old && !(w || h)) {
-        console.log("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y));
-        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - pageX: ".concat(pageX, ", pageY: ").concat(pageY, ", old: ").concat(old, ", x: ").concat(x, ", y: ").concat(y)));
-        return;
-      }
+      if (this.isClick(pageX, pageY) && !old && !(w || h)) return;
       this.selecting = true;
-      console.log('this.selecting = true', this.selecting);
       this._selectRect = {
         top: top,
         left: left,
@@ -1143,11 +1125,7 @@ var Selection = /*#__PURE__*/function () {
         right: left + w,
         bottom: top + h
       };
-      if (!old) {
-        console.log("[SENTRY_EVENT] selecting - old: ".concat(old));
-        Sentry.captureException(new Error("[SENTRY_EVENT] selecting - old: ".concat(old)));
-        this.emit('selectStart', this._initialEventData);
-      }
+      if (!old) this.emit('selectStart', this._initialEventData);
       if (!this.isClick(pageX, pageY)) this.emit('selecting', this._selectRect);
       e.preventDefault();
     }
@@ -1307,10 +1285,6 @@ var BackgroundCells = /*#__PURE__*/function (_React$Component) {
     value: function _selectable() {
       var _this2 = this;
       var node = this.containerRef.current;
-      if (!node) {
-        console.log('[SENTRY_EVENT] _selectable - node:', node);
-        Sentry.captureException(new Error("[SENTRY_EVENT] _selectable - node: ".concat(node)));
-      }
       var selector = this._selector = new Selection(this.props.container, {
         longPressThreshold: this.props.longPressThreshold
       });
@@ -1511,6 +1485,9 @@ var EventRow = /*#__PURE__*/function (_React$Component) {
   }]);
   return EventRow;
 }(React.Component);
+EventRow.propTypes = process.env.NODE_ENV !== "production" ? _objectSpread({
+  segments: PropTypes.array
+}, EventRowMixin.propTypes) : {};
 EventRow.defaultProps = _objectSpread({}, EventRowMixin.defaultProps);
 
 function endOfRange(_ref) {
@@ -1967,6 +1944,9 @@ var Header = function Header(_ref) {
     "aria-sort": "none"
   }, label);
 };
+Header.propTypes = process.env.NODE_ENV !== "production" ? {
+  label: PropTypes.node
+} : {};
 
 var DateHeader = function DateHeader(_ref) {
   var label = _ref.label,
@@ -3007,6 +2987,10 @@ var DayColumn = /*#__PURE__*/function (_React$Component) {
     };
     _this._selectable = function () {
       var node = _this.containerRef.current;
+      if (!node) {
+        console.log("[react-big-calendar] DayColumn _selectable node: ".concat(node));
+        Sentry.captureException(new Error("[react-big-calendar] DayColumn _selectable node: ".concat(node)));
+      }
       var _this$props2 = _this.props,
         longPressThreshold = _this$props2.longPressThreshold,
         localizer = _this$props2.localizer;
@@ -3026,10 +3010,17 @@ var DayColumn = /*#__PURE__*/function (_React$Component) {
             start: start,
             end: end,
             resourceId: _this.props.resource
-          }) === false) return;
+          }) === false) {
+            console.log("[react-big-calendar] DayColumn maybeSelect current.startDate: ".concat(current.startDate, ", start: ").concat(start, ", current.endDate: ").concat(current.endDate, ", end: ").concat(end, ", this.props.resource: ").concat(_this.props.resource));
+            Sentry.captureException(new Error("[react-big-calendar] DayColumn maybeSelect current.startDate: ".concat(current.startDate, ", start: ").concat(start, ", current.endDate: ").concat(current.endDate, ", end: ").concat(end, ", this.props.resource: ").concat(_this.props.resource)));
+            return;
+          }
         }
         if (_this.state.start !== state.start || _this.state.end !== state.end || _this.state.selecting !== state.selecting) {
           _this.setState(state);
+        } else {
+          console.log("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting));
+          Sentry.captureException(new Error("[react-big-calendar] DayColumn maybeSelect this.state.start: ".concat(_this.state.start, ", state.start: ").concat(state.start, ", this.state.end: ").concat(_this.state.end, ", state.end: ").concat(state.end, ", this.state.selecting: ").concat(_this.state.selecting, ", state.selecting: ").concat(state.selecting)));
         }
       };
       var selectionState = function selectionState(point) {
@@ -3150,7 +3141,10 @@ var DayColumn = /*#__PURE__*/function (_React$Component) {
   _createClass(DayColumn, [{
     key: "componentDidMount",
     value: function componentDidMount() {
-      this.props.selectable && this._selectable();
+      var _this2 = this;
+      this.props.selectable && setTimeout(function () {
+        return _this2._selectable();
+      }, 0);
       if (this.props.isNow) {
         this.setTimeIndicatorPositionUpdateInterval();
       }
@@ -3197,15 +3191,15 @@ var DayColumn = /*#__PURE__*/function (_React$Component) {
   }, {
     key: "setTimeIndicatorPositionUpdateInterval",
     value: function setTimeIndicatorPositionUpdateInterval() {
-      var _this2 = this;
+      var _this3 = this;
       var tail = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
       if (!this.intervalTriggered && !tail) {
         this.positionTimeIndicator();
       }
       this._timeIndicatorTimeout = window.setTimeout(function () {
-        _this2.intervalTriggered = true;
-        _this2.positionTimeIndicator();
-        _this2.setTimeIndicatorPositionUpdateInterval();
+        _this3.intervalTriggered = true;
+        _this3.positionTimeIndicator();
+        _this3.setTimeIndicatorPositionUpdateInterval();
       }, 60000);
     }
   }, {
@@ -3418,11 +3412,6 @@ var ResourceHeader = function ResourceHeader(_ref) {
   var label = _ref.label;
   return /*#__PURE__*/React.createElement(React.Fragment, null, label);
 };
-ResourceHeader.propTypes = process.env.NODE_ENV !== "production" ? {
-  label: PropTypes.node,
-  index: PropTypes.number,
-  resource: PropTypes.object
-} : {};
 
 var TimeGridHeader = /*#__PURE__*/function (_React$Component) {
   _inherits(TimeGridHeader, _React$Component);

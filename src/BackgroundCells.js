@@ -5,7 +5,6 @@ import clsx from 'clsx'
 import { notify } from './utils/helpers'
 import { dateCellSelection, getSlotAtX, pointInBox } from './utils/selection'
 import Selection, { getBoundsForNode, isEvent, isShowMore } from './Selection'
-import Sentry from './utils/sentry'
 
 class BackgroundCells extends React.Component {
   constructor(props, context) {
@@ -73,11 +72,6 @@ class BackgroundCells extends React.Component {
 
   _selectable() {
     let node = this.containerRef.current
-
-    if (!node) {
-      console.log('[SENTRY_EVENT] _selectable - node:', node)
-      Sentry.captureException(new Error(`[SENTRY_EVENT] _selectable - node: ${node}`))
-    }
 
     let selector = (this._selector = new Selection(this.props.container, {
       longPressThreshold: this.props.longPressThreshold,

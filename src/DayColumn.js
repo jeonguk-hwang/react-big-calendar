@@ -13,6 +13,7 @@ import TimeGridEvent from './TimeGridEvent'
 import { DayLayoutAlgorithmPropType } from './utils/propTypes'
 
 import DayColumnWrapper from './DayColumnWrapper'
+import Sentry from './utils/sentry'
 
 class DayColumn extends React.Component {
   state = { selecting: false, timeIndicatorPosition: null }
@@ -26,7 +27,7 @@ class DayColumn extends React.Component {
   }
 
   componentDidMount() {
-    this.props.selectable && this._selectable()
+    this.props.selectable && setTimeout(() => this._selectable(), 0)
 
     if (this.props.isNow) {
       this.setTimeIndicatorPositionUpdateInterval()
@@ -254,6 +255,12 @@ class DayColumn extends React.Component {
 
   _selectable = () => {
     let node = this.containerRef.current
+
+    if (!node) {
+      console.log(`[react-big-calendar] DayColumn _selectable node: ${node}`)
+      Sentry.captureException(new Error(`[react-big-calendar] DayColumn _selectable node: ${node}`))
+    }
+
     const { longPressThreshold, localizer } = this.props
     let selector = (this._selector = new Selection(() => node, {
       longPressThreshold: longPressThreshold,
@@ -270,8 +277,12 @@ class DayColumn extends React.Component {
           (localizer.eq(current.startDate, start, 'minutes') &&
             localizer.eq(current.endDate, end, 'minutes')) ||
           onSelecting({ start, end, resourceId: this.props.resource }) === false
-        )
+        ) {
+          console.log(`[react-big-calendar] DayColumn maybeSelect current.startDate: ${current.startDate}, start: ${start}, current.endDate: ${current.endDate}, end: ${end}, this.props.resource: ${this.props.resource}`)
+          Sentry.captureException(new Error(`[react-big-calendar] DayColumn maybeSelect current.startDate: ${current.startDate}, start: ${start}, current.endDate: ${current.endDate}, end: ${end}, this.props.resource: ${this.props.resource}`))
+
           return
+        }
       }
 
       if (
@@ -280,6 +291,9 @@ class DayColumn extends React.Component {
         this.state.selecting !== state.selecting
       ) {
         this.setState(state)
+      } else {
+        console.log(`[react-big-calendar] DayColumn maybeSelect this.state.start: ${this.state.start}, state.start: ${state.start}, this.state.end: ${this.state.end}, state.end: ${state.end}, this.state.selecting: ${this.state.selecting}, state.selecting: ${state.selecting}`)
+        Sentry.captureException(new Error(`[react-big-calendar] DayColumn maybeSelect this.state.start: ${this.state.start}, state.start: ${state.start}, this.state.end: ${this.state.end}, state.end: ${state.end}, this.state.selecting: ${this.state.selecting}, state.selecting: ${state.selecting}`))
       }
     }
 
